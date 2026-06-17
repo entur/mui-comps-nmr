@@ -53,7 +53,7 @@ TypeScript from the **live sobek schema** using
 [The Guild's GraphQL Code Generator](https://the-guild.dev/graphql/codegen).
 
 - **Canonical schema URL:** `https://entur.github.io/sobek/schema.graphqls`
-- `npm run codegen` downloads that schema and emits `src/generated/sobekTypes.ts`
+- `npm run codegen` downloads that schema (`scripts/fetchSchema.ts`) and emits `src/generated/sobekTypes.ts`
   containing `VehicleType`, `PassengerCapacity`, `MultilingualString`, and the
   enums (`PropulsionType`, `FuelType`, `HybridCategory`, `TransportMode`).
 - Enums are emitted as **runtime** TypeScript enums, so the form both
@@ -63,26 +63,16 @@ TypeScript from the **live sobek schema** using
   `dev`/`test`/`build` (the `build` and `storybook` scripts run it automatically
   via their `pre*` hooks).
 
-### Read/write type-parity guard
+### Read vs. write types
 
 Sobek's schema exposes both `type VehicleType` (returned by reads) and
 `input VehicleTypeInput` (the write payload) — a near-duplicate pair that is a
-by-product of sobek's Java/GraphQL stack. This library exposes **one** type,
-`VehicleType`.
-
-Before generating, `scripts/checkTypeParity.ts` downloads the schema, puts the
-field names of each type into a set, and compares them. The two are not
-identical — and that's expected:
-
-- read-only on `VehicleType`: `vehicles`, `version`, `created`, `changed`, `changedBy`
-- write-only on `VehicleTypeInput`: `dataOwnerRef` (the owning organisation; a
-  save-time concern the form doesn't edit)
-
-These known differences are allow-listed. The guard **fails the build** only if
-a *new, unreviewed* difference appears — i.e. the schema drifted in a way nobody
-has accounted for — so the divergence is caught at build time instead of leaking
-into runtime. When that happens, review the change and update the allow-list in
-`scripts/checkTypeParity.ts`.
+by-product of sobek's Java/GraphQL stack. They diverge in known ways (e.g.
+`vehicles`/`version`/`created`/`changed`/`changedBy` are read-only;
+`dataOwnerRef` is write-only). For now this library exposes **one** type,
+`VehicleType`, and the form edits only the shared fields. Reconciling the
+read/write split properly is deferred to a data-driven render in a later
+iteration.
 
 ## Building the library
 
@@ -122,7 +112,7 @@ declarations.
 
 | Script | Does |
 | --- | --- |
-| `npm run codegen` | Parity guard → download schema → generate `src/generated/sobekTypes.ts`. |
+| `npm run codegen` | Download schema → generate `src/generated/sobekTypes.ts`. |
 | `npm run build` | Library build to `dist/` (runs `codegen` first). |
 | `npm run storybook` | Local Storybook dev server (runs `codegen` first). |
 | `npm run build-storybook` | Static Storybook build (runs `codegen` first). |

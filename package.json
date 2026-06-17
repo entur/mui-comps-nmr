@@ -19,7 +19,7 @@
   },
   "sideEffects": false,
   "scripts": {
-    "codegen": "tsx scripts/checkTypeParity.ts && graphql-codegen --config codegen.ts",
+    "codegen": "tsx scripts/fetchSchema.ts && graphql-codegen --config codegen.ts",
     "prebuild": "npm run codegen",
     "build": "vite build",
     "prestorybook": "npm run codegen",

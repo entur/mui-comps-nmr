@@ -3,7 +3,7 @@ import type { CodegenConfig } from '@graphql-codegen/cli';
 /**
  * GraphQL Code Generator config (The Guild's `@graphql-codegen`).
  *
- * Reads the sobek schema snapshot that `scripts/checkTypeParity.ts` downloads to
+ * Reads the sobek schema snapshot that `scripts/fetchSchema.ts` downloads to
  * `schema/sobek.schema.graphqls` and emits `src/generated/sobekTypes.ts` with
  * the `typescript` plugin. Enums are emitted as runtime TypeScript enums (not
  * plain string-union types) so the form can both type-check against them and
