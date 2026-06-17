@@ -1,0 +1,11 @@
+node_modules/
+dist/
+storybook-static/
+
+# Build artifacts derived from the live sobek schema (regenerated, never edited)
+schema/
+src/generated/
+
+# misc
+*.log
+.DS_Store
