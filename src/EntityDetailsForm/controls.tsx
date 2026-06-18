@@ -8,7 +8,8 @@ type Mls = { lang?: string | null; value?: string | null } | null | undefined;
 const numVal = (n: unknown): number | '' => (n == null ? '' : (n as number));
 const numOr = (s: string): number | undefined => (s === '' ? undefined : Number(s));
 const textOr = (s: string): string | undefined => (s === '' ? undefined : s);
-const mergeName = (cur: Mls, text: string): Mls => (text === '' ? undefined : { ...cur, value: text });
+const mergeName = (cur: Mls, text: string): Mls =>
+  text === '' ? undefined : { ...cur, value: text };
 
 export interface ControlProps {
   spec: FieldSpec;
@@ -66,7 +67,11 @@ export function renderControl({ spec, label, value, disabled, onChange }: Contro
       return (
         <FormControlLabel
           control={
-            <Switch checked={!!value} disabled={disabled} onChange={e => onChange(e.target.checked)} />
+            <Switch
+              checked={!!value}
+              disabled={disabled}
+              onChange={e => onChange(e.target.checked)}
+            />
           }
           label={label}
         />

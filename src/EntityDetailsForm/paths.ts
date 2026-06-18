@@ -20,7 +20,11 @@ export const setPath = (obj: unknown, path: readonly string[], val: unknown): Ob
   const next = rest.length === 0 ? val : setPath(root[head], rest, val);
   // Collapse a plain (non-array) child object that no longer holds any value.
   const pruned =
-    rest.length > 0 && next && typeof next === 'object' && !Array.isArray(next) && allEmpty(next as Obj)
+    rest.length > 0 &&
+    next &&
+    typeof next === 'object' &&
+    !Array.isArray(next) &&
+    allEmpty(next as Obj)
       ? undefined
       : next;
   root[head] = pruned;

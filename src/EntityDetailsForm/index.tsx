@@ -46,9 +46,15 @@ function resolveSections(fields: Record<string, FieldSpec>, layout?: Layout): Se
  * @returns A React component taking `value` / `onChange` / `mode` / `layout` / `variant`.
  */
 export function createEntityDetailsForm<E>(
-  fields: Record<string, FieldSpec>,
+  fields: Record<string, FieldSpec>
 ): FC<EntityDetailsFormProps<E>> {
-  const Form: FC<EntityDetailsFormProps<E>> = ({ value, onChange, mode, layout, variant = 'tabs' }) => {
+  const Form: FC<EntityDetailsFormProps<E>> = ({
+    value,
+    onChange,
+    mode,
+    layout,
+    variant = 'tabs',
+  }) => {
     const [active, setActive] = useState(0);
     // Drop sections left empty by unknown-only keys; clamp the active index so a
     // shrinking layout can't point past the end and render a blank panel.

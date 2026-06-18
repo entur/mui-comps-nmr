@@ -42,7 +42,9 @@ describe('distillModule', () => {
     expect(out).toMatch(/name:\s*\{ kind: 'name', path: \['name'\] \}/);
     expect(out).toMatch(/length:\s*\{ kind: 'number', path: \['length'\] \}/);
     expect(out).toMatch(/lowFloor:\s*\{ kind: 'switch', path: \['lowFloor'\] \}/);
-    expect(out).toMatch(/mode:\s*\{ kind: 'enum', path: \['mode'\], options: Object\.values\(Mode\) \}/);
+    expect(out).toMatch(
+      /mode:\s*\{ kind: 'enum', path: \['mode'\], options: Object\.values\(Mode\) \}/
+    );
   });
 
   it('flattens id-less value-objects into leaf fields with 2-element paths', () => {
@@ -69,7 +71,7 @@ describe('distillModule', () => {
   it('aborts when an Input field has no Entity counterpart (write-only)', () => {
     const writeOnly = SRC.replace(
       'export type ThingInput = {',
-      "export type ThingInput = {\n  dataOwnerRef?: Maybe<Scalars['String']['output']>;",
+      "export type ThingInput = {\n  dataOwnerRef?: Maybe<Scalars['String']['output']>;"
     );
     expect(() => distillModule(writeOnly, 'Thing', 'ThingInput')).toThrow(/dataOwnerRef/);
   });

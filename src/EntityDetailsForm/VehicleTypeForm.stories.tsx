@@ -1,13 +1,13 @@
-import { useState } from "react";
-import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useState } from 'react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import {
   createEntityDetailsForm,
   vehicleTypeFields,
   type VehicleType,
   type VehicleTypeLayout,
   type EntityDetailsFormProps,
-} from "../index";
-import { TransportMode } from "../generated/sobekTypes"; // internal-only; sample data
+} from '../index';
+import { TransportMode } from '../generated/sobekTypes'; // internal-only; sample data
 
 // The client names its own instance — the library exports only the factory.
 const VehicleTypeForm = createEntityDetailsForm<VehicleType>(vehicleTypeFields);
@@ -16,51 +16,37 @@ const VehicleTypeForm = createEntityDetailsForm<VehicleType>(vehicleTypeFields);
 // Sections render as tabs or stacked panels per `variant` (default 'tabs').
 // Capacity leaves are individually placeable (flattened by distillTypes).
 const layout: VehicleTypeLayout = {
-  Edit: [
-    "name",
-    "transportMode",
-    "length",
-    "width",
-    "height",
-    "weight",
-    "lowFloor",
-  ],
-  Propulsion: [
-    "propulsionTypes",
-    "fuelTypes",
-    "selfPropelled",
-    "maximumVelocity",
-    "maximumRange",
-  ],
+  Edit: ['name', 'transportMode', 'length', 'width', 'height', 'weight', 'lowFloor'],
+  Propulsion: ['propulsionTypes', 'fuelTypes', 'selfPropelled', 'maximumVelocity', 'maximumRange'],
   Capacity: [
-    "totalCapacity",
-    "seatingCapacity",
-    "standingCapacity",
-    "wheelchairPlaceCapacity",
-    "pramPlaceCapacity",
-    "bicycleRackCapacity",
-    "fareClass",
+    'totalCapacity',
+    'seatingCapacity',
+    'standingCapacity',
+    'wheelchairPlaceCapacity',
+    'pramPlaceCapacity',
+    'bicycleRackCapacity',
+    'fareClass',
   ],
   Environment: [
-    "formDragCoefficient",
-    "rollResistanceCoefficient",
-    "maximumEngineEffectKW",
-    "hybridCategory",
+    'formDragCoefficient',
+    'rollResistanceCoefficient',
+    'maximumEngineEffectKW',
+    'hybridCategory',
   ],
 };
 
 const sample: VehicleType = {
-  netexId: "VEH:VehicleType:1",
-  name: { lang: "en", value: "Class 70 EMU" },
+  netexId: 'VEH:VehicleType:1',
+  name: { lang: 'en', value: 'Class 70 EMU' },
   transportMode: TransportMode.Rail,
   length: 26.4,
   lowFloor: true,
 };
 
 const meta: Meta<typeof VehicleTypeForm> = {
-  title: "Forms/VehicleTypeForm",
+  title: 'Forms/VehicleTypeForm',
   component: VehicleTypeForm,
-  args: { mode: "edit", layout },
+  args: { mode: 'edit', layout },
 };
 export default meta;
 type Story = StoryObj<typeof VehicleTypeForm>;
@@ -71,10 +57,10 @@ const Controlled = (args: EntityDetailsFormProps<VehicleType>) => {
   return <VehicleTypeForm {...args} value={value} onChange={setValue} />;
 };
 
-export const Edit: Story = { render: Controlled };
+export const Tabs: Story = { render: Controlled };
 export const Stacked: Story = {
   render: Controlled,
-  args: { variant: "stacked" },
+  args: { variant: 'stacked' },
 };
-export const View: Story = { render: Controlled, args: { mode: "view" } };
-export const Flat: Story = { render: Controlled, args: { layout: undefined } };
+export const TabsRO: Story = { render: Controlled, args: { mode: 'view' } };
+export const IncludeAllViaZeroConfig: Story = { render: Controlled, args: { layout: undefined } };

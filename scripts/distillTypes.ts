@@ -141,7 +141,8 @@ const members = (lit: ts.TypeLiteralNode): Map<string, ts.TypeNode> => {
 
 /** Register a field key, throwing on collision across the flat key space. */
 const push = (taken: Set<string>, f: FieldOut): FieldOut => {
-  if (taken.has(f.key)) throw new Error(`distillTypes: duplicate field key "${f.key}" (path ${f.path.join('.')})`);
+  if (taken.has(f.key))
+    throw new Error(`distillTypes: duplicate field key "${f.key}" (path ${f.path.join('.')})`);
   taken.add(f.key);
   return f;
 };
@@ -159,7 +160,7 @@ const deriveFields = (
   model: Model,
   path: string[],
   serverManaged: boolean,
-  taken: Set<string>,
+  taken: Set<string>
 ): FieldOut[] => {
   const r = resolveType(type, model);
   const here = [...path, name];
@@ -169,15 +170,18 @@ const deriveFields = (
     return [push(taken, { key: name, kind, path: here, optionEnum: r.enum, serverManaged })];
   }
   if (r.scalar) {
-    return [push(taken, { key: name, kind: SCALAR_KIND[r.scalar] ?? 'text', path: here, serverManaged })];
+    return [
+      push(taken, { key: name, kind: SCALAR_KIND[r.scalar] ?? 'text', path: here, serverManaged }),
+    ];
   }
   if (r.object) {
-    if (r.object === MLS) return [push(taken, { key: name, kind: 'name', path: here, serverManaged })];
+    if (r.object === MLS)
+      return [push(taken, { key: name, kind: 'name', path: here, serverManaged })];
     const lit = model.objects.get(r.object);
     if (!lit || r.isArray || hasIdentity(lit)) return []; // relation / array-of-objects / unknown → omit
     // value-object → flatten leaves
     return [...members(lit)].flatMap(([leaf, leafType]) =>
-      deriveFields(leaf, leafType, model, here, serverManaged, taken),
+      deriveFields(leaf, leafType, model, here, serverManaged, taken)
     );
   }
   return []; // unsupported → omit (round-trips on Entity)
@@ -217,7 +221,7 @@ export function distillModule(src: string, entity: string, inpEntity: string): s
   if (writeOnly.length) {
     throw new Error(
       `distillTypes: ${inpEntity}.${writeOnly.join(', ')} has no ${entity} counterpart — ` +
-        `add \`extend type ${entity} { ${writeOnly[0]}: ... }\` to schema/sobek.patch.graphqls`,
+        `add \`extend type ${entity} { ${writeOnly[0]}: ... }\` to schema/sobek.patch.graphqls`
     );
   }
 
@@ -230,12 +234,10 @@ export function distillModule(src: string, entity: string, inpEntity: string): s
 
   // Verbatim interface members + referenced type names.
   const refs = new Set<string>();
-  const memberLines = lit.members
-    .filter(ts.isPropertySignature)
-    .map(m => {
-      if (m.type) refNames(m.type, refs);
-      return '  ' + m.getText().replace(/;?\s*$/, '') + ';';
-    });
+  const memberLines = lit.members.filter(ts.isPropertySignature).map(m => {
+    if (m.type) refNames(m.type, refs);
+    return '  ' + m.getText().replace(/;?\s*$/, '') + ';';
+  });
 
   // Imports: enum value-imports (used in interface or as FIELDS options) vs type-imports.
   const optionEnums = new Set(fields.map(f => f.optionEnum).filter(Boolean) as string[]);
@@ -258,8 +260,12 @@ export function distillModule(src: string, entity: string, inpEntity: string): s
   return [
     BANNER,
     `// Distilled from ${entity} (full read type); write boundary from ${inpEntity}.`,
-    typeImports.size ? `import type { ${[...typeImports].sort().join(', ')} } from '${GEN_IMPORT}';` : '',
-    valueImports.size ? `import { ${[...valueImports].sort().join(', ')} } from '${GEN_IMPORT}';` : '',
+    typeImports.size
+      ? `import type { ${[...typeImports].sort().join(', ')} } from '${GEN_IMPORT}';`
+      : '',
+    valueImports.size
+      ? `import { ${[...valueImports].sort().join(', ')} } from '${GEN_IMPORT}';`
+      : '',
     `import type { FieldSpec, Layout as LibLayout } from '${TYPES_IMPORT}';`,
     '',
     '/** The value shape — the full read entity, nested structure preserved. */',
@@ -314,7 +320,9 @@ const buildBarrel = (rows: Row[]): string =>
 
 const main = (): void => {
   const src = readFileSync(resolve(GENERATED), 'utf8');
-  const manifest: (string | { entity: string })[] = JSON.parse(readFileSync(resolve(MANIFEST), 'utf8'));
+  const manifest: (string | { entity: string })[] = JSON.parse(
+    readFileSync(resolve(MANIFEST), 'utf8')
+  );
   const rows = manifest.map(toRow);
   for (const r of rows) {
     const out = distillModule(src, r.entity, r.inpEntity);
