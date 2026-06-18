@@ -1,9 +1,14 @@
 import type { ReactNode } from 'react';
 import { Autocomplete, FormControlLabel, MenuItem, Switch, TextField } from '@mui/material';
-import type { FieldSpec } from './types';
+import type { FieldEntry, FieldSpec } from './types';
+import { ObjectGrid } from './ObjectGrid';
 
 /** A MultilingualString-ish shape: only `.value` is edited; `.lang` is preserved. */
 type Mls = { lang?: string | null; value?: string | null } | null | undefined;
+
+/** Pin the input label above the field even when empty, so rows align whether
+ *  or not a field carries a value (MUI otherwise rests it inside until populated). */
+const SHRINK_LABEL = { inputLabel: { shrink: true } } as const;
 
 const numVal = (n: unknown): number | '' => (n == null ? '' : (n as number));
 const numOr = (s: string): number | undefined => (s === '' ? undefined : Number(s));
@@ -18,6 +23,13 @@ export interface ControlProps {
   disabled: boolean;
   /** Emit the next raw value for this field's path (`undefined` clears it). */
   onChange: (next: unknown) => void;
+  /** True when this field is the only one in its section. A `grid` then omits
+   *  its own label (the section tab/heading already names it); ignored by the
+   *  scalar controls, which always carry their own label. */
+  solo?: boolean;
+  /** `grid` only — explicit column order/labels (the layout entry's `entries`).
+   *  Omit → columns auto-derived from row data. */
+  cols?: FieldEntry[];
 }
 
 /**
@@ -31,8 +43,22 @@ export interface ControlProps {
  * @param onChange Receives the next raw value.
  * @returns The control node.
  */
-export function renderControl({ spec, label, value, disabled, onChange }: ControlProps): ReactNode {
-  const common = { label, disabled, size: 'small' as const, fullWidth: true };
+export function renderControl({
+  spec,
+  label,
+  value,
+  disabled,
+  onChange,
+  solo,
+  cols,
+}: ControlProps): ReactNode {
+  const common = {
+    label,
+    disabled,
+    size: 'small' as const,
+    fullWidth: true,
+    slotProps: SHRINK_LABEL,
+  };
 
   switch (spec.kind) {
     case 'number':
@@ -105,9 +131,15 @@ export function renderControl({ spec, label, value, disabled, onChange }: Contro
           options={[...(spec.options ?? [])]}
           value={((value as string[] | null | undefined) ?? []).filter(Boolean)}
           onChange={(_e, v) => onChange(v.length ? v : undefined)}
-          renderInput={params => <TextField {...params} label={label} />}
+          renderInput={params => <TextField {...params} label={label} slotProps={SHRINK_LABEL} />}
         />
       );
+
+    case 'grid':
+      // Read-only relation table. `disabled`/`onChange` don't apply — grids are
+      // always serverManaged. `value` is the relation array at the field's path.
+      // Show the label only when sharing the section with other fields.
+      return <ObjectGrid rows={value} label={label} showLabel={!solo} cols={cols} />;
 
     default:
       return null;

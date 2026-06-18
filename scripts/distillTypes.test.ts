@@ -17,6 +17,8 @@ export type Thing = {
   mode?: Maybe<Mode>;
   cap?: Maybe<Cap>;
   rel?: Maybe<Rel>;
+  rels?: Maybe<Array<Rel>>;
+  tags?: Maybe<Array<Cap>>;
   version?: Maybe<Scalars['String']['output']>;
 };
 export type ThingInput = {
@@ -52,9 +54,18 @@ describe('distillModule', () => {
     expect(out).toMatch(/total:\s*\{ kind: 'number', path: \['cap', 'total'\] \}/);
   });
 
-  it('omits relations (object with identity) from FIELDS but keeps them on Entity', () => {
+  it('omits single relations (object with identity) from FIELDS but keeps them on Entity', () => {
     expect(out).toMatch(/rel\?: Maybe<Rel>;/); // on the interface
     expect(out).not.toMatch(/rel:\s*\{ kind:/); // not in FIELDS
+  });
+
+  it('emits a grid field for an array of identity objects, auto-flagged serverManaged', () => {
+    expect(out).toMatch(/rels:\s*\{ kind: 'grid', path: \['rels'\], serverManaged: true \}/);
+  });
+
+  it('omits arrays of id-less value-objects (no flat control, no grid)', () => {
+    expect(out).toMatch(/tags\?: Maybe<Array<Cap>>;/); // on the interface
+    expect(out).not.toMatch(/tags:\s*\{ kind:/); // not in FIELDS
   });
 
   it('flags server-managed fields (on Entity, not Input)', () => {

@@ -1,9 +1,10 @@
-# @entur/nmr-comps
+# @entur/mui-comps-nmr
 
-A small React component library for Entur's **NMR** (Nasjonalt Materiellregister
-— National Vehicle Registry). Components are built on [MUI](https://mui.com) and
-typed directly from the live [sobek](https://github.com/entur/sobek) GraphQL
-schema. Documented and previewed with [Storybook](https://storybook.js.org).
+A small React MUI component library for Entur's
+[hathor](https://github.com/entur/hathor) frontend. Components are built on
+[MUI](https://mui.com) and typed directly from the live
+[sobek](https://github.com/entur/sobek) GraphQL schema. Documented and previewed
+with [Storybook](https://storybook.js.org).
 
 > Status: seed. The library ships a generic `createEntityDetailsForm` factory;
 > per-entity bindings (`vehicleTypeFields`, `vehicleFields`) are generated from
@@ -20,7 +21,7 @@ back a typed React component. Name it whatever fits your UI. No data fetching,
 no save logic, no i18n runtime, no router — drop it into any MUI app.
 
 ```tsx
-import { createEntityDetailsForm, vehicleTypeFields, type VehicleType, type VehicleTypeLayout } from '@entur/nmr-comps';
+import { createEntityDetailsForm, vehicleTypeFields, type VehicleType, type VehicleTypeLayout } from '@entur/mui-comps-nmr';
 
 const VehicleTypeForm = createEntityDetailsForm<VehicleType>(vehicleTypeFields);
 
@@ -63,9 +64,14 @@ Key points:
 - **`variant`** — when there are ≥2 sections, `'tabs'` (default) shows a tab
   bar with one panel visible at a time; `'stacked'` renders all panels top-to-bottom.
 - **`serverManaged` fields** — fields flagged `serverManaged` (backend-owned:
-  `version`, `created`, `changed`, `changedBy`) render locked even in `edit`
-  mode. Their values are stale after a successful save; the client is responsible
-  for refetching.
+  `version`, `created`, `changed`, `changedBy`) are **hidden from the editable
+  model**: they render locked even in `edit` mode and are surfaced purely so the
+  user can *see* the entity's extra meta/semantic context. They are **not
+  round-tripped** — the backend owns them, so they are never merged into the
+  write payload and never travel back as edits. This is the key difference from
+  an ordinary omitted field, whose value *does* pass through `onChange`
+  untouched. Their displayed values go stale after a successful save; the client
+  refetches to refresh them.
 - **Labels** — every label defaults to a humanized version of the field key
   (`seatingCapacity` → "Seating Capacity"). Override per-field via `{ field, label }`
   in the layout entry. There is **no i18n dependency** — localization is entirely
@@ -100,12 +106,41 @@ then distils that into per-entity modules.
   into individually-addressable entries with their access path (`path:
   ['passengerCapacity', 'seatingCapacity']`). Each entry carries:
   - `kind` — the control family (`text`, `number`, `name`, `switch`, `enum`,
-    `enumMulti`).
+    `enumMulti`, `grid`).
   - `path` — access path into the entity value.
   - `options` — enum member list (for `enum`/`enumMulti`).
-  - `serverManaged` — present on backend-owned fields.
-- **Relations and array-of-objects** (e.g. `vehicles`) are omitted from
-  `FIELDS` but kept on the `Entity` type so they round-trip untouched.
+  - `serverManaged` — **derived, not hand-set**: a field present on the read
+    `Entity` but absent from its `Input` is backend-owned, so distill flags it.
+    No client tagging.
+- **Array-of-object relations** (e.g. a vehicle type's `vehicles` list — an array
+  of identity-bearing objects) distill to a single `grid` field. It renders as a
+  **read-only table** (`ObjectGrid`, built on
+  [MUI X Data Grid](https://mui.com/x/react-data-grid/)) whose columns are derived
+  at runtime from the row data — scalar and `MultilingualString` leaves shown,
+  nested objects/arrays skipped. Such relations are absent from the `Input` type,
+  so they distill as `serverManaged` automatically and are never edited here.
+  Place the field in a layout section (`Vehicles: ['vehicles']`) to render it.
+  To fix the column order and labels, give the layout entry nested `entries`
+  (each a `{ field, label }` where `field` is a row-object key):
+
+  ```ts
+  const layout: VehicleTypeLayout = {
+    Vehicles: [{ field: 'vehicles', entries: [
+      { field: 'netexId', label: 'NeTEx ID' },
+      { field: 'name', label: 'Name' },
+    ] }],
+  };
+  ```
+
+  Omit `entries` to auto-derive every column. `entries` is ignored for non-grid
+  fields.
+- **Single relations and id-less object arrays** (e.g. a one-to-one linked entity,
+  or a `keyValues` list with no identity) get **no** `FIELDS` entry — there is no
+  control family for them and editing them is out of scope for a flat details
+  form. They stay on the `Entity` type, so they ride along on `value` untouched:
+  every edit writes a single leaf by its `path`, never the whole object, so
+  editing a scalar can't drop a relation. This is what lets the edited `value`
+  round-trip back as a complete entity.
 - The `FIELDS` data and enum runtime values are bundled into the published JS;
   `Entity` types are type-only and erased at runtime.
 

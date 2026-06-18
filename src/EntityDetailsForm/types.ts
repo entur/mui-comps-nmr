@@ -6,8 +6,9 @@
  */
 import type { FC } from 'react';
 
-/** Control families the renderer knows how to draw. */
-export type FieldKind = 'text' | 'number' | 'name' | 'switch' | 'enum' | 'enumMulti';
+/** Control families the renderer knows how to draw. `grid` is a read-only table
+ *  of an array-of-objects relation (always `serverManaged`); the rest are inputs. */
+export type FieldKind = 'text' | 'number' | 'name' | 'switch' | 'enum' | 'enumMulti' | 'grid';
 
 /** One field's runtime descriptor (generated into `FIELDS`). */
 export interface FieldSpec {
@@ -16,8 +17,9 @@ export interface FieldSpec {
   path: readonly string[];
   /** Member list for `enum` / `enumMulti`. */
   options?: readonly string[];
-  /** Backend owns this value (on Entity, not Input): render locked, round-trips
-   *  untouched, stale after save (client refetches). */
+  /** Backend owns this value (on Entity, not Input). Hidden from the editable
+   *  model: rendered locked for viewing only, never merged into the write
+   *  payload — not round-tripped. Stale after save (client refetches). */
   serverManaged?: boolean;
 }
 
@@ -27,6 +29,12 @@ export interface FieldEntry<K extends string = string> {
   field: K;
   /** Override the humanized-default label (any language — localization is the client's job). */
   label?: string;
+  /** **`grid` fields only** — explicit column order and labels. Each nested
+   *  entry's `field` is a property key of the row object; its `label` overrides
+   *  the humanized default. Columns render in this order; keys absent here are
+   *  dropped. Omit to auto-derive every column from the row data. Ignored for
+   *  non-grid fields. */
+  entries?: FieldEntry[];
   [k: string]: unknown; // future per-field overrides (e.g. width)
 }
 

@@ -1,0 +1,152 @@
+/**
+ * Read-only grid for an array-of-objects relation (a `grid` field — see
+ * `FieldKind`). Columns are derived at runtime from the row data: scalar leaves
+ * and `MultilingualString` values are shown; nested objects/arrays are skipped.
+ * Always presentational — relations are `serverManaged`, never edited here.
+ */
+import { lazy, Suspense, useMemo } from 'react';
+import { Box, Skeleton, Typography } from '@mui/material';
+import type { GridColDef } from '@mui/x-data-grid';
+import type { FieldEntry } from './types';
+import { humanize } from './humanize';
+
+/* ------------------------------------------------------------------ *\
+   Constants
+\* ------------------------------------------------------------------ */
+
+const ID_KEYS = ['netexId', 'id'] as const; // first present → row id
+const ROW_H = 40, HEAD_H = 48, PAD = 4, MAX_H = 420; // grid sizing (px)
+const COL = { flex: 1, minWidth: 120 } as const; // shared column defaults
+
+/** Defer the heavy DataGrid until a grid actually renders (often in an unselected
+ *  tab). `@mui/x-data-grid` is an externalized peer dep, so this dynamic import
+ *  stays in the output for the host bundler to code-split into its own chunk —
+ *  forms whose entities have no grid field never pay for it. */
+const DataGrid = lazy(() => import('@mui/x-data-grid').then(m => ({ default: m.DataGrid })));
+
+/* ------------------------------------------------------------------ *\
+   Cell helpers
+\* ------------------------------------------------------------------ */
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
+/** MultilingualString-ish: an object carrying a `value` leaf. */
+const isMls = (v: unknown): v is { value?: unknown } => isObj(v) && 'value' in v;
+const isScalar = (v: unknown): boolean =>
+  v == null || ['string', 'number', 'boolean'].includes(typeof v);
+/** Renderable in a flat cell: scalar or MultilingualString (shown as `.value`). */
+const renderable = (v: unknown): boolean => isScalar(v) || isMls(v);
+const cell = (v: unknown): unknown => (isMls(v) ? (v.value ?? '') : v);
+
+/**
+ * Pick the columns to show: the union of row keys, minus any key that carries a
+ * non-renderable sample (nested object / array) in any row. Insertion order of
+ * first appearance is preserved.
+ */
+const deriveColumns = (rows: readonly Obj[]): string[] => {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  const bad = new Set<string>();
+  for (const row of rows) {
+    for (const k of Object.keys(row)) {
+      if (!seen.has(k)) (seen.add(k), order.push(k));
+      const v = row[k];
+      if (v != null && !renderable(v)) bad.add(k);
+    }
+  }
+  return order.filter(k => !bad.has(k));
+};
+
+const rowId = (row: Obj, i: number): string | number => {
+  for (const k of ID_KEYS) if (row[k] != null) return row[k] as string | number;
+  return i;
+};
+
+/* ------------------------------------------------------------------ *\
+   Component
+\* ------------------------------------------------------------------ */
+
+export interface ObjectGridProps {
+  /** The relation array (the field's raw value). */
+  rows: unknown;
+  /** Field label. Always the grid's `aria-label`; shown visibly only when
+   *  `showLabel` (see below). */
+  label: string;
+  /** Draw a visible caption above the grid. The form sets this true only when
+   *  the grid shares its section with other fields; alone in a section, the
+   *  section tab/heading already names it, so a caption would double the label.
+   *  Styled as a field caption (not `subtitle2`) so it never reads as a heading. */
+  showLabel?: boolean;
+  /** Explicit column order + labels (the layout entry's `entries`). Each `field`
+   *  is a row-object property key; `label` overrides the humanized default.
+   *  Omit → columns auto-derived from the row data in first-seen order. */
+  cols?: FieldEntry[];
+}
+
+/**
+ * Render a relation array as a read-only MUI X DataGrid.
+ *
+ * @param rows      The array-of-objects value (anything non-array renders empty).
+ * @param label     Accessible name; visible caption when `showLabel`.
+ * @param showLabel Whether to draw the visible caption (set by the form).
+ * @param cols      Explicit column order/labels; omit to auto-derive.
+ * @returns The grid node (or an empty-state line when there are no rows).
+ */
+export function ObjectGrid({ rows, label, showLabel, cols }: ObjectGridProps): React.ReactNode {
+  // Memoize on `rows` so the column/row derivations below stay cached across
+  // unrelated parent re-renders (a fresh filter() each render would defeat them).
+  const data = useMemo<Obj[]>(
+    () => (Array.isArray(rows) ? (rows.filter(isObj) as Obj[]) : []),
+    [rows]
+  );
+
+  // Explicit `cols` win (order + labels); otherwise derive every renderable
+  // column from the row data, labeled by `humanize`.
+  const columns = useMemo<GridColDef[]>(
+    () =>
+      cols?.length
+        ? cols.map(c => ({ ...COL, field: c.field, headerName: c.label ?? humanize(c.field) }))
+        : deriveColumns(data).map(k => ({ ...COL, field: k, headerName: humanize(k) })),
+    [data, cols]
+  );
+  const gridRows = useMemo(
+    () =>
+      data.map((row, i) => {
+        const out: Obj = { id: rowId(row, i) };
+        for (const c of columns) out[c.field] = cell(row[c.field]);
+        return out;
+      }),
+    [data, columns]
+  );
+
+  const height = Math.min(HEAD_H + Math.max(gridRows.length, 1) * ROW_H + PAD, MAX_H);
+
+  return (
+    <Box sx={{ width: '100%' }}>
+      {showLabel ? (
+        <Typography variant="caption" component="div" color="text.secondary" sx={{ mb: 0.5 }}>
+          {label}
+        </Typography>
+      ) : null}
+      {gridRows.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          None
+        </Typography>
+      ) : (
+        <Box sx={{ height, width: '100%' }}>
+          <Suspense fallback={<Skeleton variant="rounded" height={height} />}>
+            <DataGrid
+              aria-label={label}
+              rows={gridRows}
+              columns={columns}
+              density="compact"
+              hideFooter
+              disableRowSelectionOnClick
+              disableColumnMenu
+            />
+          </Suspense>
+        </Box>
+      )}
+    </Box>
+  );
+}

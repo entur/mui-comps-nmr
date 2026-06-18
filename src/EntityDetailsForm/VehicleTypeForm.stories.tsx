@@ -7,7 +7,7 @@ import {
   type VehicleTypeLayout,
   type EntityDetailsFormProps,
 } from '../index';
-import { TransportMode } from '../generated/sobekTypes'; // internal-only; sample data
+import { TransportMode, type Vehicle } from '../generated/sobekTypes'; // internal-only; sample data
 
 // The client names its own instance — the library exports only the factory.
 const VehicleTypeForm = createEntityDetailsForm<VehicleType>(vehicleTypeFields);
@@ -15,6 +15,10 @@ const VehicleTypeForm = createEntityDetailsForm<VehicleType>(vehicleTypeFields);
 // Object-key order = section order; array order = field order within the section.
 // Sections render as tabs or stacked panels per `variant` (default 'tabs').
 // Capacity leaves are individually placeable (flattened by distillTypes).
+// `vehicles` is a distilled `grid` field (serverManaged, auto-derived from the
+// Input boundary) — placed in its own section, it renders as a read-only table.
+// Its `entries` fix the column order and labels; omit `entries` to auto-derive
+// every column from the row data.
 const layout: VehicleTypeLayout = {
   Edit: ['name', 'transportMode', 'length', 'width', 'height', 'weight', 'lowFloor'],
   Propulsion: ['propulsionTypes', 'fuelTypes', 'selfPropelled', 'maximumVelocity', 'maximumRange'],
@@ -33,7 +37,22 @@ const layout: VehicleTypeLayout = {
     'maximumEngineEffectKW',
     'hybridCategory',
   ],
+  Vehicles: [
+    {
+      field: 'vehicles',
+      entries: [
+        { field: 'netexId', label: 'NeTEx ID' },
+        { field: 'name', label: 'Name' },
+        { field: 'operationalNumber', label: 'Op. No.' },
+      ],
+    },
+  ],
 };
+
+const sampleVehicles: Vehicle[] = [
+  { netexId: 'VEH:Vehicle:701', name: { lang: 'en', value: 'Unit 701' }, operationalNumber: '701' },
+  { netexId: 'VEH:Vehicle:702', name: { lang: 'en', value: 'Unit 702' }, operationalNumber: '702' },
+];
 
 const sample: VehicleType = {
   netexId: 'VEH:VehicleType:1',
@@ -41,6 +60,7 @@ const sample: VehicleType = {
   transportMode: TransportMode.Rail,
   length: 26.4,
   lowFloor: true,
+  vehicles: sampleVehicles,
 };
 
 const meta: Meta<typeof VehicleTypeForm> = {

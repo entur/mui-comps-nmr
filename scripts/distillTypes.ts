@@ -152,7 +152,8 @@ const push = (taken: Set<string>, f: FieldOut): FieldOut => {
  * - scalar/enum/boolean → one field; enum-array → enumMulti.
  * - MultilingualString → `name` control.
  * - id-less value-object → recurse (flatten); leaf collisions throw.
- * - relation (identity) / array-of-objects / unsupported → omitted (return []).
+ * - array of identity objects → one `grid` field (read-only; carries serverManaged).
+ * - single relation / id-less object array / unsupported → omitted (return []).
  */
 const deriveFields = (
   name: string,
@@ -178,7 +179,14 @@ const deriveFields = (
     if (r.object === MLS)
       return [push(taken, { key: name, kind: 'name', path: here, serverManaged })];
     const lit = model.objects.get(r.object);
-    if (!lit || r.isArray || hasIdentity(lit)) return []; // relation / array-of-objects / unknown → omit
+    if (!lit) return []; // unknown object → omit (round-trips on Entity)
+    // Array of linked entities → read-only grid. `serverManaged` is the flag the
+    // caller already derived from the Input boundary (relations are absent from
+    // Input, so this lands true) — not hand-tagged downstream.
+    if (r.isArray && hasIdentity(lit))
+      return [push(taken, { key: name, kind: 'grid', path: here, serverManaged })];
+    if (hasIdentity(lit)) return []; // single relation → no flat control; omit
+    if (r.isArray) return []; // identity-less object array → omit
     // value-object → flatten leaves
     return [...members(lit)].flatMap(([leaf, leafType]) =>
       deriveFields(leaf, leafType, model, here, serverManaged, taken)

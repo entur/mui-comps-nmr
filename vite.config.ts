@@ -19,6 +19,7 @@ const EXTERNAL = [
   'react/jsx-runtime',
   '@mui/material',
   '@mui/icons-material',
+  '@mui/x-data-grid',
   '@emotion/react',
   '@emotion/styled',
 ];

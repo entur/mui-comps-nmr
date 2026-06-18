@@ -71,6 +71,7 @@ export const FIELDS = {
   selfPropelled: { kind: 'switch', path: ['selfPropelled'] },
   shortName: { kind: 'name', path: ['shortName'] },
   transportMode: { kind: 'enum', path: ['transportMode'], options: Object.values(TransportMode) },
+  vehicles: { kind: 'grid', path: ['vehicles'], serverManaged: true },
   version: { kind: 'text', path: ['version'], serverManaged: true },
   weight: { kind: 'number', path: ['weight'] },
   width: { kind: 'number', path: ['width'] },

@@ -1,5 +1,5 @@
 /**
- * Public API of `@entur/nmr-comps`.
+ * Public API of `@entur/mui-comps-nmr`.
  *
  * The generic form factory + its types, plus the generated per-entity types and
  * field registries (from the distilled `src/entities` barrel). Consumers never
