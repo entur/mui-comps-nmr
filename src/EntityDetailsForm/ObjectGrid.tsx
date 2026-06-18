@@ -4,39 +4,52 @@
  * and `MultilingualString` values are shown; nested objects/arrays are skipped.
  * Always presentational — relations are `serverManaged`, never edited here.
  */
-import { lazy, Suspense, useMemo } from 'react';
-import { Box, Skeleton, Typography } from '@mui/material';
-import type { GridColDef } from '@mui/x-data-grid';
-import type { FieldEntry } from './types';
-import { humanize } from './humanize';
+import { lazy, Suspense, useMemo } from "react";
+import { Box, CircularProgress, Typography } from "@mui/material";
+import type { GridColDef } from "@mui/x-data-grid";
+import type { FieldEntry } from "./types";
+import { humanize } from "./humanize";
 
 /* ------------------------------------------------------------------ *\
    Constants
 \* ------------------------------------------------------------------ */
 
-const ID_KEYS = ['netexId', 'id'] as const; // first present → row id
-const ROW_H = 40, HEAD_H = 48, PAD = 4, MAX_H = 420; // grid sizing (px)
+const ID_KEYS = ["netexId", "id"] as const; // first present → row id
+const ROW_H = 40,
+  HEAD_H = 48,
+  PAD = 4,
+  MAX_H = 420; // grid sizing (px)
 const COL = { flex: 1, minWidth: 120 } as const; // shared column defaults
+
+/** Transparent data cells (column headers / `th` keep their default background). */
+const GRID_SX = {
+  backgroundColor: "transparent",
+  "& .MuiDataGrid-cell": { backgroundColor: "transparent" },
+} as const;
 
 /** Defer the heavy DataGrid until a grid actually renders (often in an unselected
  *  tab). `@mui/x-data-grid` is an externalized peer dep, so this dynamic import
  *  stays in the output for the host bundler to code-split into its own chunk —
  *  forms whose entities have no grid field never pay for it. */
-const DataGrid = lazy(() => import('@mui/x-data-grid').then(m => ({ default: m.DataGrid })));
+const DataGrid = lazy(() =>
+  import("@mui/x-data-grid").then((m) => ({ default: m.DataGrid })),
+);
 
 /* ------------------------------------------------------------------ *\
    Cell helpers
 \* ------------------------------------------------------------------ */
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
+const isObj = (v: unknown): v is Obj =>
+  !!v && typeof v === "object" && !Array.isArray(v);
 /** MultilingualString-ish: an object carrying a `value` leaf. */
-const isMls = (v: unknown): v is { value?: unknown } => isObj(v) && 'value' in v;
+const isMls = (v: unknown): v is { value?: unknown } =>
+  isObj(v) && "value" in v;
 const isScalar = (v: unknown): boolean =>
-  v == null || ['string', 'number', 'boolean'].includes(typeof v);
+  v == null || ["string", "number", "boolean"].includes(typeof v);
 /** Renderable in a flat cell: scalar or MultilingualString (shown as `.value`). */
 const renderable = (v: unknown): boolean => isScalar(v) || isMls(v);
-const cell = (v: unknown): unknown => (isMls(v) ? (v.value ?? '') : v);
+const cell = (v: unknown): unknown => (isMls(v) ? (v.value ?? "") : v);
 
 /**
  * Pick the columns to show: the union of row keys, minus any key that carries a
@@ -54,7 +67,7 @@ const deriveColumns = (rows: readonly Obj[]): string[] => {
       if (v != null && !renderable(v)) bad.add(k);
     }
   }
-  return order.filter(k => !bad.has(k));
+  return order.filter((k) => !bad.has(k));
 };
 
 const rowId = (row: Obj, i: number): string | number => {
@@ -92,12 +105,17 @@ export interface ObjectGridProps {
  * @param cols      Explicit column order/labels; omit to auto-derive.
  * @returns The grid node (or an empty-state line when there are no rows).
  */
-export function ObjectGrid({ rows, label, showLabel, cols }: ObjectGridProps): React.ReactNode {
+export function ObjectGrid({
+  rows,
+  label,
+  showLabel,
+  cols,
+}: ObjectGridProps): React.ReactNode {
   // Memoize on `rows` so the column/row derivations below stay cached across
   // unrelated parent re-renders (a fresh filter() each render would defeat them).
   const data = useMemo<Obj[]>(
     () => (Array.isArray(rows) ? (rows.filter(isObj) as Obj[]) : []),
-    [rows]
+    [rows],
   );
 
   // Explicit `cols` win (order + labels); otherwise derive every renderable
@@ -105,9 +123,17 @@ export function ObjectGrid({ rows, label, showLabel, cols }: ObjectGridProps): R
   const columns = useMemo<GridColDef[]>(
     () =>
       cols?.length
-        ? cols.map(c => ({ ...COL, field: c.field, headerName: c.label ?? humanize(c.field) }))
-        : deriveColumns(data).map(k => ({ ...COL, field: k, headerName: humanize(k) })),
-    [data, cols]
+        ? cols.map((c) => ({
+            ...COL,
+            field: c.field,
+            headerName: c.label ?? humanize(c.field),
+          }))
+        : deriveColumns(data).map((k) => ({
+            ...COL,
+            field: k,
+            headerName: humanize(k),
+          })),
+    [data, cols],
   );
   const gridRows = useMemo(
     () =>
@@ -116,15 +142,23 @@ export function ObjectGrid({ rows, label, showLabel, cols }: ObjectGridProps): R
         for (const c of columns) out[c.field] = cell(row[c.field]);
         return out;
       }),
-    [data, columns]
+    [data, columns],
   );
 
-  const height = Math.min(HEAD_H + Math.max(gridRows.length, 1) * ROW_H + PAD, MAX_H);
+  const height = Math.min(
+    HEAD_H + Math.max(gridRows.length, 1) * ROW_H + PAD,
+    MAX_H,
+  );
 
   return (
-    <Box sx={{ width: '100%' }}>
+    <Box sx={{ width: "100%" }}>
       {showLabel ? (
-        <Typography variant="caption" component="div" color="text.secondary" sx={{ mb: 0.5 }}>
+        <Typography
+          variant="caption"
+          component="div"
+          color="text.secondary"
+          sx={{ mb: 0.5 }}
+        >
           {label}
         </Typography>
       ) : null}
@@ -133,8 +167,25 @@ export function ObjectGrid({ rows, label, showLabel, cols }: ObjectGridProps): R
           None
         </Typography>
       ) : (
-        <Box sx={{ height, width: '100%' }}>
-          <Suspense fallback={<Skeleton variant="rounded" height={height} />}>
+        <Box sx={{ height, width: "100%" }}>
+          <Suspense
+            fallback={
+              <Box
+                sx={{
+                  height,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 1,
+                }}
+              >
+                <CircularProgress size={18} />
+                <Typography variant="body2" color="text.secondary">
+                  Init…
+                </Typography>
+              </Box>
+            }
+          >
             <DataGrid
               aria-label={label}
               rows={gridRows}
@@ -143,6 +194,7 @@ export function ObjectGrid({ rows, label, showLabel, cols }: ObjectGridProps): R
               hideFooter
               disableRowSelectionOnClick
               disableColumnMenu
+              sx={GRID_SX}
             />
           </Suspense>
         </Box>
