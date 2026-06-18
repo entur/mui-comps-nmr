@@ -1,0 +1,13 @@
+# Committed overlay — keeps Input ⊆ Entity until sobek adds these to the read types.
+# These fields are intentionally AHEAD of the live read schema; safe because this
+# project executes no GraphQL operations (types + form only).
+extend type VehicleType {
+  dataOwnerRef: String
+}
+extend type Vehicle {
+  dataOwnerRef: String
+}
+
+# TODO: Add vehicleModel props in VT
+
+# TODO: Add "new mockery props" (KVs) from mural

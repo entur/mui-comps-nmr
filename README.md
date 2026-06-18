@@ -5,74 +5,136 @@ A small React component library for Entur's **NMR** (Nasjonalt Materiellregister
 typed directly from the live [sobek](https://github.com/entur/sobek) GraphQL
 schema. Documented and previewed with [Storybook](https://storybook.js.org).
 
-> Status: seed. One component so far — `VehicleTypeForm`. Not published to a
-> package registry yet; the Storybook is deployed to GitHub Pages.
+> Status: seed. The library ships a generic `createEntityDetailsForm` factory;
+> per-entity bindings (`vehicleTypeFields`, `vehicleFields`) are generated from
+> the live schema. Not published to a package registry yet; the Storybook is
+> deployed to GitHub Pages.
 
 ## Components
 
-### `VehicleTypeForm`
+### `createEntityDetailsForm<E>(fields)`
 
-A presentational editor for a NeTEx **VehicleType**, driven entirely by
-`value` / `onChange` / `mode`. No data fetching, no save logic, no i18n runtime,
-no router — drop it into any MUI app.
+The library is **factory-only** — it ships no premade, hand-named form
+components. You call `createEntityDetailsForm` with a field registry and get
+back a typed React component. Name it whatever fits your UI. No data fetching,
+no save logic, no i18n runtime, no router — drop it into any MUI app.
 
 ```tsx
-import { useState } from 'react';
-import { VehicleTypeForm, type VehicleType } from '@entur/nmr-comps';
+import { createEntityDetailsForm, vehicleTypeFields, type VehicleType, type VehicleTypeLayout } from '@entur/nmr-comps';
 
-function Example({ initial }: { initial: VehicleType }) {
-  const [vt, setVt] = useState(initial);
-  return <VehicleTypeForm value={vt} onChange={setVt} mode="edit" />;
-}
+const VehicleTypeForm = createEntityDetailsForm<VehicleType>(vehicleTypeFields);
+
+const layout: VehicleTypeLayout = {
+  Edit: ['name', 'shortName', 'length'],
+  Capacity: ['totalCapacity', 'seatingCapacity', 'fareClass'],
+};
+// <VehicleTypeForm value={v} onChange={setV} mode="edit" layout={layout} variant="tabs" />
 ```
 
 | Prop | Type | Notes |
 | --- | --- | --- |
-| `value` | `VehicleType` | Current value (the codegen'd schema type — see below). |
-| `onChange` | `(next: VehicleType) => void` | Fired with the merged value on every edit. |
+| `value` | `E` | Current entity value (the generated read type — see below). |
+| `onChange` | `(next: E) => void` | Fired with the merged value on every edit. |
 | `mode` | `'view' \| 'edit'` | `'view'` disables all inputs. |
-| `t?` | `(key: string, fallback: string) => string` | Optional translate fn; English fallbacks by default. |
+| `layout?` | `Layout<EntityField>` | Whitelist of sections (see below). Omitted → flat, all fields rendered. |
+| `variant?` | `'tabs' \| 'stacked'` | How ≥2 sections are presented. Default: `'tabs'`. |
 
-#### Localisation without an i18n dependency
+#### Layout contract
 
-The library imports no i18n framework. Every label is requested through
-`t(key, fallback)`; the default `t` just returns the English `fallback`. If your
-app already uses `react-i18next` (or anything with a compatible `t`), pass it:
+`layout` is a **whitelist of sections**: each key becomes a section label; its
+array is the ordered list of fields to render in that section. A layout item is
+either a bare field key or `{ field, label }` to override the default label:
 
-```tsx
-import { useTranslation } from 'react-i18next';
-
-const { t } = useTranslation();
-<VehicleTypeForm value={vt} onChange={setVt} mode="edit" t={t} />;
+```ts
+const layout: VehicleTypeLayout = {
+  Identity: ['name', 'shortName', { field: 'dataOwnerRef', label: 'Owner' }],
+  Dimensions: ['length', 'height', 'width', 'weight'],
+};
 ```
 
-## The GraphQL → TypeScript boundary
+Key points:
 
-The library never hand-maintains the `VehicleType` shape. Instead it generates
-TypeScript from the **live sobek schema** using
-[The Guild's GraphQL Code Generator](https://the-guild.dev/graphql/codegen).
+- **Loss-free omission** — a field omitted from `layout` is not rendered, but
+  its value passes through `onChange` untouched. Omitting a field never drops
+  data.
+- **Omit `layout` entirely** — renders all fields in a flat single panel.
+- **Single section renders flat** — no tab bar or panel header; the section key
+  is ignored visually.
+- **`variant`** — when there are ≥2 sections, `'tabs'` (default) shows a tab
+  bar with one panel visible at a time; `'stacked'` renders all panels top-to-bottom.
+- **`serverManaged` fields** — fields flagged `serverManaged` (backend-owned:
+  `version`, `created`, `changed`, `changedBy`) render locked even in `edit`
+  mode. Their values are stale after a successful save; the client is responsible
+  for refetching.
+- **Labels** — every label defaults to a humanized version of the field key
+  (`seatingCapacity` → "Seating Capacity"). Override per-field via `{ field, label }`
+  in the layout entry. There is **no i18n dependency** — localization is entirely
+  the client's responsibility via the `label` override.
+
+## The GraphQL → TypeScript pipeline
+
+The library never hand-maintains entity shapes. It generates TypeScript from the
+**live sobek schema** using
+[The Guild's GraphQL Code Generator](https://the-guild.dev/graphql/codegen),
+then distils that into per-entity modules.
 
 - **Canonical schema URL:** `https://entur.github.io/sobek/schema.graphqls`
-- `npm run codegen` downloads that schema (`scripts/fetchSchema.ts`) and emits `src/generated/sobekTypes.ts`
-  containing `VehicleType`, `PassengerCapacity`, `MultilingualString`, and the
-  enums (`PropulsionType`, `FuelType`, `HybridCategory`, `TransportMode`).
-- Enums are emitted as **runtime** TypeScript enums, so the form both
+- `npm run codegen` downloads that schema (`scripts/fetchSchema.ts`) and emits
+  `src/generated/sobekTypes.ts` containing all entity types and enums
+  (`PropulsionType`, `FuelType`, `HybridCategory`, `TransportMode`, `FareClass`,
+  …). Enums are emitted as **runtime** TypeScript enums so the form both
   type-checks against them and lists their members in dropdowns.
 - The generated file and the downloaded schema are **git-ignored** — they are
-  build artifacts, not source. Run `npm run codegen` once after cloning, before
-  `dev`/`test`/`build` (the `build` and `storybook` scripts run it automatically
-  via their `pre*` hooks).
+  build artifacts, not source.
 
-### Read vs. write types
+### The distill step
 
-Sobek's schema exposes both `type VehicleType` (returned by reads) and
-`input VehicleTypeInput` (the write payload) — a near-duplicate pair that is a
-by-product of sobek's Java/GraphQL stack. They diverge in known ways (e.g.
-`vehicles`/`version`/`created`/`changed`/`changedBy` are read-only;
-`dataOwnerRef` is write-only). For now this library exposes **one** type,
-`VehicleType`, and the form edits only the shared fields. Reconciling the
-read/write split properly is deferred to a data-driven render in a later
-iteration.
+`npm run distill` (which chains `npm run codegen`) parses
+`src/generated/sobekTypes.ts` and writes **committed** per-entity modules to
+`src/entities/*`. Each module contains:
+
+- **`Entity` type** — the full read entity type, verbatim (nested structure
+  preserved for value round-tripping).
+- **`FIELDS` registry** — a flat, addressable map of every renderable field.
+  Value-object leaves (e.g. `passengerCapacity.seatingCapacity`) are hoisted
+  into individually-addressable entries with their access path (`path:
+  ['passengerCapacity', 'seatingCapacity']`). Each entry carries:
+  - `kind` — the control family (`text`, `number`, `name`, `switch`, `enum`,
+    `enumMulti`).
+  - `path` — access path into the entity value.
+  - `options` — enum member list (for `enum`/`enumMulti`).
+  - `serverManaged` — present on backend-owned fields.
+- **Relations and array-of-objects** (e.g. `vehicles`) are omitted from
+  `FIELDS` but kept on the `Entity` type so they round-trip untouched.
+- The `FIELDS` data and enum runtime values are bundled into the published JS;
+  `Entity` types are type-only and erased at runtime.
+
+The public API re-exports each module under its entity name:
+
+```ts
+// src/entities/index.ts (auto-generated)
+export type { Entity as VehicleType, EntityLayout as VehicleTypeLayout } from './vehicleType';
+export { FIELDS as vehicleTypeFields } from './vehicleType';
+export type { Entity as Vehicle, EntityLayout as VehicleLayout } from './vehicle';
+export { FIELDS as vehicleFields } from './vehicle';
+```
+
+### Ahead-of-backend patch overlay
+
+`schema/sobek.patch.graphqls` is a committed SDL overlay that adds write-only
+fields onto the read types before codegen runs:
+
+```graphql
+extend type VehicleType { dataOwnerRef: String }
+extend type Vehicle { dataOwnerRef: String }
+```
+
+This satisfies the distill script's "Input ⊆ Entity" check (every field in
+`VehicleTypeInput` must exist on `VehicleType`) so that `dataOwnerRef` is
+included in `FIELDS`. The generated types are therefore deliberately **ahead of
+the live read schema**. This is safe because the library executes no GraphQL
+operations — it only generates types and renders a form. When sobek adds these
+fields to its read types, delete the matching `extend` lines by hand.
 
 ## Building the library
 
@@ -104,7 +166,7 @@ declarations.
 
 - `npm run storybook` — run Storybook locally on port 6006.
 - `npm run build-storybook` — build the static Storybook to `storybook-static/`.
-- CI (`.github/workflows/storybook.yml`) runs `codegen` → `build-storybook` →
+- CI (`.github/workflows/storybook.yml`) runs `distill` → `build-storybook` →
   deploy to **GitHub Pages** on every push to `main`. Enable Pages for the repo
   with the "GitHub Actions" source.
 
@@ -113,11 +175,12 @@ declarations.
 | Script | Does |
 | --- | --- |
 | `npm run codegen` | Download schema → generate `src/generated/sobekTypes.ts`. |
-| `npm run build` | Library build to `dist/` (runs `codegen` first). |
-| `npm run storybook` | Local Storybook dev server (runs `codegen` first). |
-| `npm run build-storybook` | Static Storybook build (runs `codegen` first). |
-| `npm run test` | Vitest unit tests. |
-| `npm run typecheck` | `tsc --noEmit`. |
+| `npm run distill` | Download schema → codegen → write `src/entities/*`. |
+| `npm run build` | Library build to `dist/` (runs `distill` first). |
+| `npm run storybook` | Local Storybook dev server (runs `distill` first). |
+| `npm run build-storybook` | Static Storybook build (runs `distill` first). |
+| `npm run test` | Vitest unit tests (runs `distill` first). |
+| `npm run typecheck` | `tsc --noEmit` (runs `distill` first). |
 
 ## Versions
 
