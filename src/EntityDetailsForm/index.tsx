@@ -50,7 +50,10 @@ export function createEntityDetailsForm<E>(
 ): FC<EntityDetailsFormProps<E>> {
   const Form: FC<EntityDetailsFormProps<E>> = ({ value, onChange, mode, layout, variant = 'tabs' }) => {
     const [active, setActive] = useState(0);
-    const sections = resolveSections(fields, layout);
+    // Drop sections left empty by unknown-only keys; clamp the active index so a
+    // shrinking layout can't point past the end and render a blank panel.
+    const sections = resolveSections(fields, layout).filter(s => s.fields.length > 0);
+    const current = Math.min(active, Math.max(0, sections.length - 1));
 
     const field = ({ key, label }: ResolvedField): ReactNode => {
       const spec = fields[key];
@@ -93,14 +96,15 @@ export function createEntityDetailsForm<E>(
     // Tabs: one section visible at a time.
     return (
       <Box>
-        <Tabs value={active} onChange={(_e, v: number) => setActive(v)} sx={{ mb: 2 }}>
+        <Tabs value={current} onChange={(_e, v: number) => setActive(v)} sx={{ mb: 2 }}>
           {sections.map(s => (
             <Tab key={s.label} label={s.label} />
           ))}
         </Tabs>
-        {sections[active]?.fields.map(field)}
+        {sections[current]?.fields.map(field)}
       </Box>
     );
   };
+  Form.displayName = 'EntityDetailsForm';
   return Form;
 }

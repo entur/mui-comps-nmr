@@ -63,4 +63,17 @@ describe('createEntityDetailsForm', () => {
     expect(screen.getByRole('tab', { name: 'A' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'B' })).toBeInTheDocument();
   });
+
+  it('stacks sections with no tab bar when variant="stacked"', () => {
+    render(<Host layout={{ A: ['name'], B: ['length'] }} variant="stacked" />);
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.getByLabelText('Name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Length')).toBeInTheDocument();
+  });
+
+  it('drops a section whose keys are all unknown (no empty tab)', () => {
+    render(<Host layout={{ Real: ['name'], Ghost: ['nope'] }} />);
+    expect(screen.queryByRole('tab')).toBeNull(); // only one non-empty section → flat
+    expect(screen.getByLabelText('Name')).toBeInTheDocument();
+  });
 });
