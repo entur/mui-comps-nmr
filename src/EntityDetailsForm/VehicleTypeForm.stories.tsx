@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from "react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   createEntityDetailsForm,
   vehicleTypeFields,
   type VehicleType,
   type VehicleTypeLayout,
   type EntityDetailsFormProps,
-} from '../index';
-import { TransportMode, type Vehicle } from '../generated/sobekTypes'; // internal-only; sample data
+} from "../index";
+import { TransportMode, type Vehicle } from "../generated/sobekTypes"; // internal-only; sample data
 
 // The client names its own instance — the library exports only the factory.
 const VehicleTypeForm = createEntityDetailsForm<VehicleType>(vehicleTypeFields);
@@ -20,43 +20,65 @@ const VehicleTypeForm = createEntityDetailsForm<VehicleType>(vehicleTypeFields);
 // Its `entries` fix the column order and labels; omit `entries` to auto-derive
 // every column from the row data.
 const layout: VehicleTypeLayout = {
-  Edit: ['name', 'transportMode', 'length', 'width', 'height', 'weight', 'lowFloor'],
-  Propulsion: ['propulsionTypes', 'fuelTypes', 'selfPropelled', 'maximumVelocity', 'maximumRange'],
+  Edit: [
+    "name",
+    "transportMode",
+    "length",
+    "width",
+    "height",
+    "weight",
+    "lowFloor",
+  ],
+  Propulsion: [
+    "propulsionTypes",
+    "fuelTypes",
+    "selfPropelled",
+    "maximumVelocity",
+    "maximumRange",
+  ],
   Capacity: [
-    'totalCapacity',
-    'seatingCapacity',
-    'standingCapacity',
-    'wheelchairPlaceCapacity',
-    'pramPlaceCapacity',
-    'bicycleRackCapacity',
-    'fareClass',
+    "totalCapacity",
+    "seatingCapacity",
+    "standingCapacity",
+    "wheelchairPlaceCapacity",
+    "pramPlaceCapacity",
+    "bicycleRackCapacity",
+    "fareClass",
   ],
   Environment: [
-    'formDragCoefficient',
-    'rollResistanceCoefficient',
-    'maximumEngineEffectKW',
-    'hybridCategory',
+    "formDragCoefficient",
+    "rollResistanceCoefficient",
+    "maximumEngineEffectKW",
+    "hybridCategory",
   ],
   Vehicles: [
     {
-      field: 'vehicles',
+      field: "vehicles",
       entries: [
-        { field: 'netexId', label: 'NeTEx ID' },
-        { field: 'name', label: 'Name' },
-        { field: 'operationalNumber', label: 'Op. No.' },
+        /*{ field: 'netexId', label: 'NeTEx ID' },*/
+        { field: "name", label: "Name" },
+        { field: "operationalNumber", label: "Op. No." },
       ],
     },
   ],
 };
 
 const sampleVehicles: Vehicle[] = [
-  { netexId: 'VEH:Vehicle:701', name: { lang: 'en', value: 'Unit 701' }, operationalNumber: '701' },
-  { netexId: 'VEH:Vehicle:702', name: { lang: 'en', value: 'Unit 702' }, operationalNumber: '702' },
+  {
+    netexId: "VEH:Vehicle:701",
+    name: { lang: "en", value: "Unit 701" },
+    operationalNumber: "701",
+  },
+  {
+    netexId: "VEH:Vehicle:702",
+    name: { lang: "en", value: "Unit 702" },
+    operationalNumber: "702",
+  },
 ];
 
 const sample: VehicleType = {
-  netexId: 'VEH:VehicleType:1',
-  name: { lang: 'en', value: 'Class 70 EMU' },
+  netexId: "VEH:VehicleType:1",
+  name: { lang: "en", value: "Class 70 EMU" },
   transportMode: TransportMode.Rail,
   length: 26.4,
   lowFloor: true,
@@ -64,9 +86,9 @@ const sample: VehicleType = {
 };
 
 const meta: Meta<typeof VehicleTypeForm> = {
-  title: 'Forms/VehicleTypeForm',
+  title: "Forms/VehicleTypeForm",
   component: VehicleTypeForm,
-  args: { mode: 'edit', layout },
+  args: { mode: "edit", layout },
 };
 export default meta;
 type Story = StoryObj<typeof VehicleTypeForm>;
@@ -80,7 +102,10 @@ const Controlled = (args: EntityDetailsFormProps<VehicleType>) => {
 export const Tabs: Story = { render: Controlled };
 export const Stacked: Story = {
   render: Controlled,
-  args: { variant: 'stacked' },
+  args: { variant: "stacked" },
 };
-export const TabsRO: Story = { render: Controlled, args: { mode: 'view' } };
-export const IncludeAllViaZeroConfig: Story = { render: Controlled, args: { layout: undefined } };
+export const TabsRO: Story = { render: Controlled, args: { mode: "view" } };
+export const IncludeAllViaZeroConfig: Story = {
+  render: Controlled,
+  args: { layout: undefined },
+};
