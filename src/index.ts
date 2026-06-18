@@ -1,22 +1,22 @@
 /**
  * Public API of `@entur/nmr-comps`.
  *
- * Components plus the data types/enums consumers need to shape the data they
- * pass in. The data types are re-exported from the codegen'd sobek schema so
- * callers never import from `generated/` directly.
+ * The generic form factory + its types, plus the generated per-entity types and
+ * field registries (from the distilled `src/entities` barrel). Consumers never
+ * import from `generated/` directly.
  */
-export { VehicleTypeForm } from './components/VehicleTypeForm/VehicleTypeForm';
-export type { VehicleTypeFormProps } from './components/VehicleTypeForm/VehicleTypeForm';
-export { defaultT, type TFn } from './components/VehicleTypeForm/labels';
-
+export { createEntityDetailsForm } from './EntityDetailsForm';
 export type {
-  VehicleType,
-  PassengerCapacity,
-  MultilingualString,
-} from './generated/sobekTypes';
-export {
-  PropulsionType,
-  FuelType,
-  HybridCategory,
-  TransportMode,
-} from './generated/sobekTypes';
+  EntityDetailsFormProps,
+  EntityDetailsForm,
+  FieldSpec,
+  FieldKind,
+  FieldEntry,
+  LayoutItem,
+  Layout,
+  LayoutVariant,
+} from './EntityDetailsForm/types';
+
+// Generated entity types + field registries: VehicleType, VehicleTypeLayout,
+// vehicleTypeFields, Vehicle, VehicleLayout, vehicleFields.
+export * from './entities';
