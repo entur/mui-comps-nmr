@@ -3,7 +3,8 @@ dist/
 storybook-static/
 
 # Build artifacts derived from the live sobek schema (regenerated, never edited)
-schema/
+schema/*
+!schema/sobek.patch.graphqls
 src/generated/
 
 # misc

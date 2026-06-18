@@ -12,7 +12,7 @@ import type { CodegenConfig } from '@graphql-codegen/cli';
  * Canonical schema source (see README): https://entur.github.io/sobek/schema.graphqls
  */
 const config: CodegenConfig = {
-  schema: './schema/sobek.schema.graphqls',
+  schema: ['./schema/sobek.schema.graphqls', './schema/sobek.patch.graphqls'],
   generates: {
     'src/generated/sobekTypes.ts': {
       plugins: ['typescript'],

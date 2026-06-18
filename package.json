@@ -20,14 +20,18 @@
   "sideEffects": false,
   "scripts": {
     "codegen": "tsx scripts/fetchSchema.ts && graphql-codegen --config codegen.ts",
-    "prebuild": "npm run codegen",
+    "predistill": "npm run codegen",
+    "distill": "tsx scripts/distillTypes.ts",
+    "prebuild": "npm run distill",
     "build": "vite build",
-    "prestorybook": "npm run codegen",
+    "prestorybook": "npm run distill",
     "storybook": "storybook dev -p 6006",
-    "prebuild-storybook": "npm run codegen",
+    "prebuild-storybook": "npm run distill",
     "build-storybook": "storybook build",
+    "pretest": "npm run distill",
     "test": "vitest run",
     "test:watch": "vitest",
+    "pretypecheck": "npm run distill",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
