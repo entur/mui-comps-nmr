@@ -1,6 +1,17 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Box, Button, Card, CardContent, Drawer, Paper, Stack, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Drawer,
+  FormControlLabel,
+  Paper,
+  Stack,
+  Switch,
+  Typography,
+} from "@mui/material";
 import type { Vehicle, VehicleType } from "../index";
 import {
   VehicleForm,
@@ -27,6 +38,12 @@ const AppMock = () => {
   const [open, setOpen] = useState<Flavour>(null);
   const [vehicleType, setVehicleType] = useState<VehicleType>(vehicleTypeSample);
   const [vehicle, setVehicle] = useState<Vehicle>(vehicleSample);
+  // User choices steering the Drawer forms. Off by default → stacked + editable.
+  const [tabs, setTabs] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
+
+  const variant = tabs ? "tabs" : "stacked";
+  const mode = readOnly ? "view" : "edit";
 
   return (
     <Paper
@@ -44,6 +61,16 @@ const AppMock = () => {
         <CardContent
           sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}
         >
+          <Stack alignItems="flex-start">
+            <FormControlLabel
+              control={<Switch checked={tabs} onChange={e => setTabs(e.target.checked)} />}
+              label="tabs"
+            />
+            <FormControlLabel
+              control={<Switch checked={readOnly} onChange={e => setReadOnly(e.target.checked)} />}
+              label="read-only"
+            />
+          </Stack>
           <Typography variant="body1" align="center">
             Click a button to open its Form in a Drawer
           </Typography>
@@ -62,7 +89,8 @@ const AppMock = () => {
         <Box sx={{ width: DRAWER_WIDTH, p: 3 }}>
           {open === "type" && (
             <VehicleTypeForm
-              mode="edit"
+              mode={mode}
+              variant={variant}
               layout={vehicleTypeLayout}
               value={vehicleType}
               onChange={setVehicleType}
@@ -70,7 +98,8 @@ const AppMock = () => {
           )}
           {open === "vehicle" && (
             <VehicleForm
-              mode="edit"
+              mode={mode}
+              variant={variant}
               layout={vehicleLayout}
               value={vehicle}
               onChange={setVehicle}
