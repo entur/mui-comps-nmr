@@ -26,6 +26,16 @@ no i18n runtime, no router. Public API in `src/index.ts`.
   auto-derived from row data. Layout entry `entries` (`{ field, label }[]`, `field`
   = row-obj key) fixes col order + labels. Grid omits its own caption when alone
   in a section (tab/heading names it), shows it when beside other fields.
+- `reference` fields edit a single relation by its identity leaf. With a layout
+  entry `options` (`() => { value, label }[]`, value = referenced netexId) →
+  single-select Autocomplete; omit (incl. zero-config) → free-text id field.
+  Selection writes the `netexId` leaf; round-trips as the full relation object.
+- `date` / `datetime` render native `<input type=date|datetime-local>` (no date
+  dep). `datetime` value is the stored ISO sliced to `YYYY-MM-DDTHH:mm`.
+- `slotProps?` (form-level) — per-`kind` MUI overrides. TextField-backed kinds
+  (`text|number|name|enum|date|datetime`) take TextField `slotProps` (merged over
+  the label-shrink default); `enumMulti`→Autocomplete, `switch`→`SwitchProps`,
+  `grid`→`{ dataGrid }`. Per-field override is a planned later addition.
 
 ## GraphQL → TS pipeline
 
@@ -38,14 +48,19 @@ per-entity modules.
 - `npm run distill` (chains codegen) — parse generated types → write **committed**
   `src/entities/*`. Each: `Entity` type (verbatim, nested), `FIELDS` registry
   (flat addressable map; value-object leaves hoisted w/ `path`; carries `kind`,
-  `path`, `options`, `serverManaged`). `kind` ∈ `text|number|name|switch|enum|enumMulti|grid`.
+  `path`, `options`, `serverManaged`).
+  `kind` ∈ `text|number|name|switch|enum|enumMulti|grid|reference|date|datetime`.
   `serverManaged` **derived** = on `Entity`, not on `Input` (no client tag).
   Array-of-identity-objects (e.g. `vehicles`) → one `grid` field (read-only
-  table, `ObjectGrid`/MUI X Data Grid; always serverManaged). Single relations +
-  id-less object arrays (e.g. `keyValues`) get no `FIELDS` entry but stay on
-  `Entity`. Edits write one leaf by `path`, never whole object — so scalar edit
-  can't drop a relation, and edited `value` round-trips as complete entity.
-  `src/entities/index.ts` re-exports per entity name.
+  table, `ObjectGrid`/MUI X Data Grid; always serverManaged). **Read-object /
+  write-reference divergence**: a single relation whose same-named `Input` member
+  is a *pure reference* (members ⊆ `{id, netexId}`, e.g. `transportType`/`deckPlan`
+  via `*ReferenceInput`) → one `reference` field on the identity leaf (writable,
+  not serverManaged). Other single relations + id-less object arrays (e.g.
+  `keyValues`) get no `FIELDS` entry but stay on `Entity`. Edits write one leaf by
+  `path`, never whole object — so scalar edit can't drop a relation, and edited
+  `value` round-trips as complete entity. `src/entities/index.ts` re-exports per
+  entity name.
 
 ### Patch overlay
 

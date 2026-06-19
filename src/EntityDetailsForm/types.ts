@@ -9,8 +9,29 @@ import type { AutocompleteProps, SwitchProps, TextFieldProps } from '@mui/materi
 import type { DataGridProps } from '@mui/x-data-grid';
 
 /** Control families the renderer knows how to draw. `grid` is a read-only table
- *  of an array-of-objects relation (always `serverManaged`); the rest are inputs. */
-export type FieldKind = 'text' | 'number' | 'name' | 'switch' | 'enum' | 'enumMulti' | 'grid';
+ *  of an array-of-objects relation (always `serverManaged`); `reference` edits a
+ *  single relation by its identity leaf (Autocomplete when the layout supplies
+ *  `options`, else a free-text id field); `date`/`datetime` are native pickers;
+ *  the rest are plain inputs. */
+export type FieldKind =
+  | 'text'
+  | 'number'
+  | 'name'
+  | 'switch'
+  | 'enum'
+  | 'enumMulti'
+  | 'grid'
+  | 'reference'
+  | 'date'
+  | 'datetime';
+
+/** One selectable option for a `reference` field's Autocomplete. `value` is the
+ *  referenced entity's identity (written into the field's id leaf); `label` is
+ *  display-only. */
+export interface RefOption {
+  value: string;
+  label: string;
+}
 
 /** One field's runtime descriptor (generated into `FIELDS`). */
 export interface FieldSpec {
@@ -37,6 +58,11 @@ export interface FieldEntry<K extends string = string> {
    *  dropped. Omit to auto-derive every column from the row data. Ignored for
    *  non-grid fields. */
   entries?: FieldEntry[];
+  /** **`reference` fields only** — supplies the Autocomplete's candidate dataset.
+   *  A closure (capturing the client's data) returning `{ value, label }[]`;
+   *  `value` is the referenced entity's id. Omit → the field degrades to a
+   *  free-text id input. Ignored for non-reference fields. */
+  options?: () => RefOption[];
   [k: string]: unknown; // future per-field overrides (e.g. width)
 }
 
@@ -64,6 +90,9 @@ export interface ControlSlotProps {
   number?: TextFieldProps['slotProps'];
   name?: TextFieldProps['slotProps'];
   enum?: TextFieldProps['slotProps'];
+  /** `date` / `datetime` are native-input TextFields. */
+  date?: TextFieldProps['slotProps'];
+  datetime?: TextFieldProps['slotProps'];
   /** Multi-select renders an `Autocomplete`. */
   enumMulti?: AutocompleteProps<string, true, false, false>['slotProps'];
   /** Spread onto the `<Switch>` (the controlled `checked`/`onChange` always win). */

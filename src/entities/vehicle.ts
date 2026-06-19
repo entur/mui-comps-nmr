@@ -21,18 +21,19 @@ export interface Entity {
 }
 /** Flat, addressable field registry — value-object leaves hoisted, each with a path. */
 export const FIELDS = {
-  buildDate: { kind: 'text', path: ['buildDate'] },
-  changed: { kind: 'text', path: ['changed'], serverManaged: true },
+  buildDate: { kind: 'date', path: ['buildDate'] },
+  changed: { kind: 'datetime', path: ['changed'], serverManaged: true },
   changedBy: { kind: 'text', path: ['changedBy'], serverManaged: true },
   chassisNumber: { kind: 'text', path: ['chassisNumber'] },
-  created: { kind: 'text', path: ['created'], serverManaged: true },
+  created: { kind: 'datetime', path: ['created'], serverManaged: true },
   dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'] },
   description: { kind: 'name', path: ['description'] },
   name: { kind: 'name', path: ['name'] },
   netexId: { kind: 'text', path: ['netexId'] },
   operationalNumber: { kind: 'text', path: ['operationalNumber'] },
-  registrationDate: { kind: 'text', path: ['registrationDate'] },
+  registrationDate: { kind: 'date', path: ['registrationDate'] },
   registrationNumber: { kind: 'text', path: ['registrationNumber'] },
+  transportType: { kind: 'reference', path: ['transportType', 'netexId'] },
   version: { kind: 'text', path: ['version'], serverManaged: true },
 } satisfies Record<string, FieldSpec>;
 export type EntityField = keyof typeof FIELDS;

@@ -87,3 +87,39 @@ describe('distillModule', () => {
     expect(() => distillModule(writeOnly, 'Thing', 'ThingInput')).toThrow(/dataOwnerRef/);
   });
 });
+
+// Read-object / write-reference divergence + native date kinds. Separate fixture:
+// adds Date/DateTime scalars and a pure-reference Input (`{ netexId }`) for the
+// relation — the Vehicle.transportType shape.
+const SRC_REF = `
+export type Maybe<T> = T | null;
+export type Scalars = { String: { input: string; output: string }; Date: { input: string; output: string }; DateTime: { input: string; output: string } };
+export type Ref = { netexId: Scalars['String']['output']; label?: Maybe<Scalars['String']['output']> };
+export type RefReferenceInput = { netexId: Scalars['String']['input'] };
+export type Doc = {
+  netexId: Scalars['String']['output'];
+  built?: Maybe<Scalars['Date']['output']>;
+  changed?: Maybe<Scalars['DateTime']['output']>;
+  rel?: Maybe<Ref>;
+};
+export type DocInput = {
+  built?: Maybe<Scalars['Date']['output']>;
+  rel?: Maybe<RefReferenceInput>;
+};
+`;
+
+describe('distillModule — reference divergence + date kinds', () => {
+  const out = distillModule(SRC_REF, 'Doc', 'DocInput');
+
+  it('maps Date → date and DateTime → datetime', () => {
+    expect(out).toMatch(/built:\s*\{ kind: 'date', path: \['built'\] \}/);
+    expect(out).toMatch(
+      /changed:\s*\{ kind: 'datetime', path: \['changed'\], serverManaged: true \}/
+    );
+  });
+
+  it('surfaces a write-reference relation as a `reference` field on the id leaf', () => {
+    expect(out).toMatch(/rel:\s*\{ kind: 'reference', path: \['rel', 'netexId'\] \}/);
+    expect(out).toMatch(/rel\?: Maybe<Ref>;/); // read relation kept verbatim on Entity
+  });
+});

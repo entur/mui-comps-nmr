@@ -38,10 +38,11 @@ export interface Entity {
 }
 /** Flat, addressable field registry — value-object leaves hoisted, each with a path. */
 export const FIELDS = {
-  changed: { kind: 'text', path: ['changed'], serverManaged: true },
+  changed: { kind: 'datetime', path: ['changed'], serverManaged: true },
   changedBy: { kind: 'text', path: ['changedBy'], serverManaged: true },
-  created: { kind: 'text', path: ['created'], serverManaged: true },
+  created: { kind: 'datetime', path: ['created'], serverManaged: true },
   dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'] },
+  deckPlan: { kind: 'reference', path: ['deckPlan', 'netexId'] },
   description: { kind: 'name', path: ['description'] },
   euroClass: { kind: 'text', path: ['euroClass'] },
   formDragCoefficient: { kind: 'number', path: ['formDragCoefficient'] },

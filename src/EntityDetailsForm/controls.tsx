@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Autocomplete, FormControlLabel, MenuItem, Switch, TextField } from '@mui/material';
 import type { TextFieldProps } from '@mui/material';
-import type { ControlSlotProps, FieldEntry, FieldSpec } from './types';
+import type { ControlSlotProps, FieldEntry, FieldSpec, RefOption } from './types';
 import { ObjectGrid } from './ObjectGrid';
 
 /** A MultilingualString-ish shape: only `.value` is edited; `.lang` is preserved. */
@@ -21,6 +21,9 @@ const mergeSlots = (extra?: TextFieldProps['slotProps']): TextFieldProps['slotPr
 const numVal = (n: unknown): number | '' => (n == null ? '' : (n as number));
 const numOr = (s: string): number | undefined => (s === '' ? undefined : Number(s));
 const textOr = (s: string): string | undefined => (s === '' ? undefined : s);
+/** Slice a stored ISO string down to a native date input's value format:
+ *  `date` → `YYYY-MM-DD` (10 chars), `datetime-local` → `YYYY-MM-DDTHH:mm` (16). */
+const isoSlice = (v: unknown, len: number): string => (typeof v === 'string' ? v.slice(0, len) : '');
 const mergeName = (cur: Mls, text: string): Mls =>
   text === '' ? undefined : { ...cur, value: text };
 
@@ -38,6 +41,9 @@ export interface ControlProps {
   /** `grid` only — explicit column order/labels (the layout entry's `entries`).
    *  Omit → columns auto-derived from row data. */
   cols?: FieldEntry[];
+  /** `reference` only — option-dataset closure (the layout entry's `options`).
+   *  Present → render an Autocomplete; omit → degrade to a free-text id field. */
+  options?: () => RefOption[];
   /** Form-level per-kind MUI overrides. The slice for this field's `spec.kind`
    *  is applied to its control (see `ControlSlotProps`). */
   slotProps?: ControlSlotProps;
@@ -62,6 +68,7 @@ export function renderControl({
   onChange,
   solo,
   cols,
+  options,
   slotProps,
 }: ControlProps): ReactNode {
   // Shared TextField props. `slotProps` is set per-kind below (each TextField
@@ -93,6 +100,31 @@ export function renderControl({
           {...common}
           slotProps={mergeSlots(slotProps?.text)}
           value={(value as string | null | undefined) ?? ''}
+          onChange={e => onChange(textOr(e.target.value))}
+        />
+      );
+
+    case 'date':
+      return (
+        <TextField
+          {...common}
+          slotProps={mergeSlots(slotProps?.date)}
+          type="date"
+          value={isoSlice(value, 10)}
+          onChange={e => onChange(textOr(e.target.value))}
+        />
+      );
+
+    case 'datetime':
+      // Native datetime-local: the stored ISO (tz/seconds) is sliced to the
+      // input's `YYYY-MM-DDTHH:mm`. Lossy on write — fine, datetime fields here
+      // are all serverManaged (display-only, never round-tripped).
+      return (
+        <TextField
+          {...common}
+          slotProps={mergeSlots(slotProps?.datetime)}
+          type="datetime-local"
+          value={isoSlice(value, 16)}
           onChange={e => onChange(textOr(e.target.value))}
         />
       );
@@ -157,6 +189,34 @@ export function renderControl({
           renderInput={params => <TextField {...params} label={label} slotProps={SHRINK_LABEL} />}
         />
       );
+
+    case 'reference': {
+      // Single relation edited by its identity leaf (`path` ends at the id).
+      // With a `options` dataset → Autocomplete; without → free-text id field
+      // (zero-config forms carry no layout entry, so they always degrade).
+      const opts = options?.();
+      if (!opts)
+        return (
+          <TextField
+            {...common}
+            value={(value as string | null | undefined) ?? ''}
+            onChange={e => onChange(textOr(e.target.value))}
+          />
+        );
+      const selected = opts.find(o => o.value === value) ?? null;
+      return (
+        <Autocomplete
+          size="small"
+          disabled={disabled}
+          options={opts}
+          getOptionLabel={o => o.label}
+          isOptionEqualToValue={(o, v) => o.value === v.value}
+          value={selected}
+          onChange={(_e, o) => onChange(o ? o.value : undefined)}
+          renderInput={params => <TextField {...params} label={label} slotProps={SHRINK_LABEL} />}
+        />
+      );
+    }
 
     case 'grid':
       // Read-only relation table. `disabled`/`onChange` don't apply — grids are

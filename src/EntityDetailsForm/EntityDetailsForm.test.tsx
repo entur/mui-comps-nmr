@@ -99,4 +99,84 @@ describe('createEntityDetailsForm', () => {
     );
     expect(container.querySelector('.MuiSwitch-colorSecondary')).not.toBeNull();
   });
+
+  it('renders a date kind as a native date input', () => {
+    const DForm = createEntityDetailsForm<{ built?: string | null }>({
+      built: { kind: 'date', path: ['built'] },
+    });
+    render(<DForm value={{ built: '2020-01-15' }} onChange={() => {}} mode="edit" />);
+    const input = screen.getByLabelText('Built') as HTMLInputElement;
+    expect(input.type).toBe('date');
+    expect(input.value).toBe('2020-01-15');
+  });
+
+  interface R {
+    transportType?: { netexId?: string | null } | null;
+  }
+  const refFields: Record<string, FieldSpec> = {
+    transportType: { kind: 'reference', path: ['transportType', 'netexId'] },
+  };
+  const RefForm = createEntityDetailsForm<R>(refFields);
+
+  it('reference with options renders an Autocomplete showing the matched label', () => {
+    const layout = {
+      Edit: [
+        {
+          field: 'transportType',
+          label: 'VehicleType',
+          options: () => [
+            { value: 'VT:1', label: 'Class 70 EMU' },
+            { value: 'VT:2', label: 'Class 80 DMU' },
+          ],
+        },
+      ],
+    };
+    render(
+      <RefForm
+        value={{ transportType: { netexId: 'VT:2' } }}
+        onChange={() => {}}
+        mode="edit"
+        layout={layout}
+      />
+    );
+    // The combobox shows the label of the option whose value matches the id leaf.
+    expect((screen.getByLabelText('VehicleType') as HTMLInputElement).value).toBe('Class 80 DMU');
+  });
+
+  it('reference without options degrades to a free-text id field', () => {
+    // No layout → no `options` closure; the field edits the raw netexId leaf.
+    render(<RefForm value={{ transportType: { netexId: 'VT:9' } }} onChange={() => {}} mode="edit" />);
+    const input = screen.getByLabelText('Transport type') as HTMLInputElement;
+    expect(input.value).toBe('VT:9');
+    expect(input).not.toHaveAttribute('role', 'combobox');
+  });
+
+  it('reference Autocomplete writes the selected value into the id leaf', () => {
+    const Host2 = () => {
+      const [v, setV] = useState<R>({ transportType: { netexId: 'VT:1' } });
+      return (
+        <RefForm
+          value={v}
+          onChange={setV}
+          mode="edit"
+          layout={{
+            Edit: [
+              {
+                field: 'transportType',
+                options: () => [
+                  { value: 'VT:1', label: 'Alpha' },
+                  { value: 'VT:2', label: 'Beta' },
+                ],
+              },
+            ],
+          }}
+        />
+      );
+    };
+    render(<Host2 />);
+    const input = screen.getByLabelText('Transport type') as HTMLInputElement;
+    fireEvent.mouseDown(input); // open the listbox
+    fireEvent.click(screen.getByText('Beta'));
+    expect(input.value).toBe('Beta');
+  });
 });
