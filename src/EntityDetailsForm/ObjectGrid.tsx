@@ -19,7 +19,7 @@ const ROW_H = 40,
   HEAD_H = 48,
   PAD = 4,
   MAX_H = 420; // grid sizing (px)
-const COL = { flex: 1, minWidth: 120 } as const; // shared column defaults
+const COL = { flex: 1, minWidth: 90 } as const; // shared column defaults (narrow-rail friendly)
 
 /** Transparent data cells (column headers / `th` keep their default background). */
 const GRID_SX = {
@@ -156,7 +156,9 @@ export function ObjectGrid({
   );
 
   return (
-    <Box sx={{ width: "100%" }}>
+    // `minWidth: 0` lets the grid scroll horizontally *within* this box instead
+    // of forcing a flex parent (e.g. a stacked section) wider than its rail.
+    <Box sx={{ width: "100%", minWidth: 0 }}>
       {showLabel ? (
         <Typography
           variant="caption"
@@ -172,7 +174,7 @@ export function ObjectGrid({
           None
         </Typography>
       ) : (
-        <Box sx={{ height, width: "100%" }}>
+        <Box sx={{ height, width: "100%", minWidth: 0 }}>
           <Suspense
             fallback={
               <Box

@@ -5,7 +5,7 @@
  * client-supplied whitelist of sections. See the design spec for the model.
  */
 import type { FC } from 'react';
-import type { AutocompleteProps, SwitchProps, TextFieldProps } from '@mui/material';
+import type { AutocompleteProps, SwitchProps, TabsProps, TextFieldProps } from '@mui/material';
 import type { DataGridProps } from '@mui/x-data-grid';
 
 /** Control families the renderer knows how to draw. `grid` is a read-only table
@@ -99,6 +99,11 @@ export interface ControlSlotProps {
   switch?: SwitchProps;
   /** Passthrough to the read-only grid's underlying MUI X `DataGrid`. */
   grid?: { dataGrid?: Partial<DataGridProps> };
+  /** Spread onto the section `<Tabs>` (`variant: 'tabs'` only). The lib defaults
+   *  to `variant="scrollable"` + `scrollButtons="auto"` so overflowing tabs stay
+   *  reachable in narrow containers (e.g. a Drawer); override either here. The
+   *  controlled `value`/`onChange` always win. */
+  tabs?: Partial<TabsProps>;
 }
 
 export interface EntityDetailsFormProps<E> {

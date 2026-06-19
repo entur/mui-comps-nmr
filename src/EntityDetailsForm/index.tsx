@@ -116,15 +116,16 @@ export function createEntityDetailsForm<E>(
 
     // Flat: one section → no tab bar, no heading.
     if (sections.length < 2) {
-      return <Box>{sections[0]?.fields.map(field)}</Box>;
+      return <Box sx={{ width: '100%', minWidth: 0 }}>{sections[0]?.fields.map(field)}</Box>;
     }
 
     // Stacked: every section's panel in one container, each under its label.
+    // `minWidth: 0` keeps a wide child (a grid) from stretching the flex column.
     if (variant === 'stacked') {
       return (
-        <Stack spacing={3}>
+        <Stack spacing={3} sx={{ minWidth: 0 }}>
           {sections.map(s => (
-            <Box key={s.label}>
+            <Box key={s.label} sx={{ minWidth: 0 }}>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 {s.label}
               </Typography>
@@ -137,8 +138,16 @@ export function createEntityDetailsForm<E>(
 
     // Tabs: one section visible at a time.
     return (
-      <Box>
-        <Tabs value={current} onChange={(_e, v: number) => setActive(v)} sx={{ mb: 2 }}>
+      <Box sx={{ minWidth: 0 }}>
+        <Tabs
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+          {...slotProps?.tabs}
+          value={current}
+          onChange={(_e, v: number) => setActive(v)}
+          sx={{ mb: 2, ...slotProps?.tabs?.sx }}
+        >
           {sections.map(s => (
             <Tab key={s.label} label={s.label} />
           ))}

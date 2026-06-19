@@ -11,6 +11,11 @@ type Mls = { lang?: string | null; value?: string | null } | null | undefined;
  *  or not a field carries a value (MUI otherwise rests it inside until populated). */
 const SHRINK_LABEL = { inputLabel: { shrink: true } } as const;
 
+/** Native `date`/`datetime-local` inputs have a UA intrinsic min-width that
+ *  `fullWidth` doesn't override, so they overflow narrow rails (<~360px). Zero
+ *  it out and let the TextField's full width drive the size. */
+const NATIVE_INPUT_SX = { '& input': { minWidth: 0 } } as const;
+
 /** Merge consumer TextField `slotProps` over `SHRINK_LABEL`, one slot-key deep so
  *  `inputLabel.shrink` survives unless the consumer explicitly overrides it. */
 const mergeSlots = (extra?: TextFieldProps['slotProps']): TextFieldProps['slotProps'] =>
@@ -108,6 +113,7 @@ export function renderControl({
       return (
         <TextField
           {...common}
+          sx={NATIVE_INPUT_SX}
           slotProps={mergeSlots(slotProps?.date)}
           type="date"
           value={isoSlice(value, 10)}
@@ -122,6 +128,7 @@ export function renderControl({
       return (
         <TextField
           {...common}
+          sx={NATIVE_INPUT_SX}
           slotProps={mergeSlots(slotProps?.datetime)}
           type="datetime-local"
           value={isoSlice(value, 16)}
