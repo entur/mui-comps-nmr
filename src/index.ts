@@ -15,6 +15,7 @@ export type {
   LayoutItem,
   Layout,
   LayoutVariant,
+  ControlSlotProps,
 } from './EntityDetailsForm/types';
 
 // Generated entity types + field registries: VehicleType, VehicleTypeLayout,

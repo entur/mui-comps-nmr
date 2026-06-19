@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Autocomplete, FormControlLabel, MenuItem, Switch, TextField } from '@mui/material';
-import type { FieldEntry, FieldSpec } from './types';
+import type { TextFieldProps } from '@mui/material';
+import type { ControlSlotProps, FieldEntry, FieldSpec } from './types';
 import { ObjectGrid } from './ObjectGrid';
 
 /** A MultilingualString-ish shape: only `.value` is edited; `.lang` is preserved. */
@@ -9,6 +10,13 @@ type Mls = { lang?: string | null; value?: string | null } | null | undefined;
 /** Pin the input label above the field even when empty, so rows align whether
  *  or not a field carries a value (MUI otherwise rests it inside until populated). */
 const SHRINK_LABEL = { inputLabel: { shrink: true } } as const;
+
+/** Merge consumer TextField `slotProps` over `SHRINK_LABEL`, one slot-key deep so
+ *  `inputLabel.shrink` survives unless the consumer explicitly overrides it. */
+const mergeSlots = (extra?: TextFieldProps['slotProps']): TextFieldProps['slotProps'] =>
+  !extra
+    ? SHRINK_LABEL
+    : { ...extra, inputLabel: { ...SHRINK_LABEL.inputLabel, ...extra.inputLabel } };
 
 const numVal = (n: unknown): number | '' => (n == null ? '' : (n as number));
 const numOr = (s: string): number | undefined => (s === '' ? undefined : Number(s));
@@ -30,6 +38,9 @@ export interface ControlProps {
   /** `grid` only — explicit column order/labels (the layout entry's `entries`).
    *  Omit → columns auto-derived from row data. */
   cols?: FieldEntry[];
+  /** Form-level per-kind MUI overrides. The slice for this field's `spec.kind`
+   *  is applied to its control (see `ControlSlotProps`). */
+  slotProps?: ControlSlotProps;
 }
 
 /**
@@ -51,13 +62,17 @@ export function renderControl({
   onChange,
   solo,
   cols,
+  slotProps,
 }: ControlProps): ReactNode {
+  // Shared TextField props. `slotProps` is set per-kind below (each TextField
+  // kind merges its own override over `SHRINK_LABEL`); the bare default keeps
+  // the label shrunk when no override is supplied.
   const common = {
     label,
     disabled,
     size: 'small' as const,
     fullWidth: true,
-    slotProps: SHRINK_LABEL,
+    slotProps: SHRINK_LABEL as TextFieldProps['slotProps'],
   };
 
   switch (spec.kind) {
@@ -65,6 +80,7 @@ export function renderControl({
       return (
         <TextField
           {...common}
+          slotProps={mergeSlots(slotProps?.number)}
           type="number"
           value={numVal(value)}
           onChange={e => onChange(numOr(e.target.value))}
@@ -75,6 +91,7 @@ export function renderControl({
       return (
         <TextField
           {...common}
+          slotProps={mergeSlots(slotProps?.text)}
           value={(value as string | null | undefined) ?? ''}
           onChange={e => onChange(textOr(e.target.value))}
         />
@@ -84,6 +101,7 @@ export function renderControl({
       return (
         <TextField
           {...common}
+          slotProps={mergeSlots(slotProps?.name)}
           value={(value as Mls)?.value ?? ''}
           onChange={e => onChange(mergeName(value as Mls, e.target.value))}
         />
@@ -93,7 +111,10 @@ export function renderControl({
       return (
         <FormControlLabel
           control={
+            // Consumer Switch props spread first so the controlled
+            // `checked`/`disabled`/`onChange` below always win.
             <Switch
+              {...slotProps?.switch}
               checked={!!value}
               disabled={disabled}
               onChange={e => onChange(e.target.checked)}
@@ -107,6 +128,7 @@ export function renderControl({
       return (
         <TextField
           {...common}
+          slotProps={mergeSlots(slotProps?.enum)}
           select
           value={(value as string | null | undefined) ?? ''}
           onChange={e => onChange(e.target.value || undefined)}
@@ -131,6 +153,7 @@ export function renderControl({
           options={[...(spec.options ?? [])]}
           value={((value as string[] | null | undefined) ?? []).filter(Boolean)}
           onChange={(_e, v) => onChange(v.length ? v : undefined)}
+          slotProps={slotProps?.enumMulti}
           renderInput={params => <TextField {...params} label={label} slotProps={SHRINK_LABEL} />}
         />
       );
@@ -139,7 +162,15 @@ export function renderControl({
       // Read-only relation table. `disabled`/`onChange` don't apply — grids are
       // always serverManaged. `value` is the relation array at the field's path.
       // Show the label only when sharing the section with other fields.
-      return <ObjectGrid rows={value} label={label} showLabel={!solo} cols={cols} />;
+      return (
+        <ObjectGrid
+          rows={value}
+          label={label}
+          showLabel={!solo}
+          cols={cols}
+          dataGrid={slotProps?.grid?.dataGrid}
+        />
+      );
 
     default:
       return null;

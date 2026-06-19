@@ -5,6 +5,8 @@
  * client-supplied whitelist of sections. See the design spec for the model.
  */
 import type { FC } from 'react';
+import type { AutocompleteProps, SwitchProps, TextFieldProps } from '@mui/material';
+import type { DataGridProps } from '@mui/x-data-grid';
 
 /** Control families the renderer knows how to draw. `grid` is a read-only table
  *  of an array-of-objects relation (always `serverManaged`); the rest are inputs. */
@@ -49,6 +51,27 @@ export type Layout<K extends string = string> = Record<string, LayoutItem<K>[]>;
 /** How ≥2 sections are presented: tab bar (one panel) or stacked panels. */
 export type LayoutVariant = 'tabs' | 'stacked';
 
+/** Form-level MUI overrides, keyed by control kind. Applies to *every* field of
+ *  that kind. The TextField-backed kinds (`text` / `number` / `name` / `enum`)
+ *  take the TextField `slotProps` (merged over the lib's label-shrink default);
+ *  the rest take the natural target for their root MUI component.
+ *
+ *  NOTE (future): per-field overrides are not yet wired. The intended next step
+ *  is a `slotProps` key on `FieldEntry` (it already carries an open index
+ *  signature) that wins over these per-kind defaults. */
+export interface ControlSlotProps {
+  text?: TextFieldProps['slotProps'];
+  number?: TextFieldProps['slotProps'];
+  name?: TextFieldProps['slotProps'];
+  enum?: TextFieldProps['slotProps'];
+  /** Multi-select renders an `Autocomplete`. */
+  enumMulti?: AutocompleteProps<string, true, false, false>['slotProps'];
+  /** Spread onto the `<Switch>` (the controlled `checked`/`onChange` always win). */
+  switch?: SwitchProps;
+  /** Passthrough to the read-only grid's underlying MUI X `DataGrid`. */
+  grid?: { dataGrid?: Partial<DataGridProps> };
+}
+
 export interface EntityDetailsFormProps<E> {
   value: E;
   onChange: (next: E) => void;
@@ -57,6 +80,9 @@ export interface EntityDetailsFormProps<E> {
   layout?: Layout;
   /** ≥2 sections render as tabs (default) or stacked panels. */
   variant?: LayoutVariant;
+  /** Per-kind MUI overrides (see `ControlSlotProps`). Applies to every field of
+   *  the given kind; per-field overrides are a planned later addition. */
+  slotProps?: ControlSlotProps;
 }
 
 /** A factory-built form component. */

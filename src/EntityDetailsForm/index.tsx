@@ -58,6 +58,7 @@ export function createEntityDetailsForm<E>(
     mode,
     layout,
     variant = 'tabs',
+    slotProps,
   }) => {
     const [active, setActive] = useState(0);
     // Drop sections left empty by unknown-only keys; clamp the active index so a
@@ -81,6 +82,8 @@ export function createEntityDetailsForm<E>(
         solo: arr.length <= 1,
         // Grid column order/labels from the layout entry's `entries` (if any).
         cols,
+        // Per-kind MUI overrides; `renderControl` picks the slice for `spec.kind`.
+        slotProps,
       });
       return (
         <Box key={key} sx={{ mb: 2 }}>

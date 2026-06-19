@@ -76,4 +76,27 @@ describe('createEntityDetailsForm', () => {
     expect(screen.queryByRole('tab')).toBeNull(); // only one non-empty section → flat
     expect(screen.getByLabelText('Name')).toBeInTheDocument();
   });
+
+  it('applies a per-kind TextField slotProps override and keeps the shrink default', () => {
+    // `name` is a `name` kind (TextField). The override sets a slot prop but
+    // omits `inputLabel`, so the lib's label-shrink default must survive.
+    const { container } = render(<Host slotProps={{ name: { htmlInput: { maxLength: 80 } } }} />);
+    expect(screen.getByLabelText('Name')).toHaveAttribute('maxlength', '80');
+    expect(container.querySelector('label')).toHaveClass('MuiInputLabel-shrink');
+  });
+
+  it('spreads per-kind switch slotProps onto the Switch', () => {
+    const SwForm = createEntityDetailsForm<{ active?: boolean }>({
+      active: { kind: 'switch', path: ['active'] },
+    });
+    const { container } = render(
+      <SwForm
+        value={{ active: true }}
+        onChange={() => {}}
+        mode="edit"
+        slotProps={{ switch: { color: 'secondary' } }}
+      />
+    );
+    expect(container.querySelector('.MuiSwitch-colorSecondary')).not.toBeNull();
+  });
 });

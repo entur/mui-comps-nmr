@@ -6,7 +6,7 @@
  */
 import { lazy, Suspense, useMemo } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
-import type { GridColDef } from "@mui/x-data-grid";
+import type { DataGridProps, GridColDef } from "@mui/x-data-grid";
 import type { FieldEntry } from "./types";
 import { humanize } from "./humanize";
 
@@ -94,6 +94,10 @@ export interface ObjectGridProps {
    *  is a row-object property key; `label` overrides the humanized default.
    *  Omit → columns auto-derived from the row data in first-seen order. */
   cols?: FieldEntry[];
+  /** Passthrough to the underlying MUI X `DataGrid` (form-level `slotProps.grid.dataGrid`).
+   *  Applied over the lib defaults; `sx` is merged with `GRID_SX`, while
+   *  `rows`/`columns`/`aria-label` stay owned by this component. */
+  dataGrid?: Partial<DataGridProps>;
 }
 
 /**
@@ -110,6 +114,7 @@ export function ObjectGrid({
   label,
   showLabel,
   cols,
+  dataGrid,
 }: ObjectGridProps): React.ReactNode {
   // Memoize on `rows` so the column/row derivations below stay cached across
   // unrelated parent re-renders (a fresh filter() each render would defeat them).
@@ -187,14 +192,18 @@ export function ObjectGrid({
             }
           >
             <DataGrid
-              aria-label={label}
-              rows={gridRows}
-              columns={columns}
               density="compact"
               hideFooter
               disableRowSelectionOnClick
               disableColumnMenu
-              sx={GRID_SX}
+              // Consumer overrides spread before the owned props so
+              // `rows`/`columns`/`aria-label` stay fixed; `sx` is merged so the
+              // transparent `GRID_SX` survives unless the caller's `sx` clobbers it.
+              {...dataGrid}
+              aria-label={label}
+              rows={gridRows}
+              columns={columns}
+              sx={[GRID_SX, ...(Array.isArray(dataGrid?.sx) ? dataGrid.sx : [dataGrid?.sx])]}
             />
           </Suspense>
         </Box>
