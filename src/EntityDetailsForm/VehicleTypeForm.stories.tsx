@@ -6,11 +6,21 @@ import {
   type VehicleType,
   type VehicleTypeLayout,
   type EntityDetailsFormProps,
+  type RefOption,
 } from "../index";
 import { TransportMode, type Vehicle } from "../generated/sobekTypes"; // internal-only; sample data
 
 // The client names its own instance — the library exports only the factory.
 const VehicleTypeForm = createEntityDetailsForm<VehicleType>(vehicleTypeFields);
+
+// Candidate DeckPlans for the `deckPlan` reference field — in a real app this
+// comes from a query. The layout entry's `options` closure captures it; selecting
+// writes `value` (a netexId) into the `deckPlan.netexId` leaf, `label` displays.
+const deckPlanRefs: RefOption[] = [
+  { value: "VEH:DeckPlan:1", label: "Single-deck 2+2" },
+  { value: "VEH:DeckPlan:2", label: "Double-deck" },
+  { value: "VEH:DeckPlan:3", label: "Low-floor articulated" },
+];
 
 // Object-key order = section order; array order = field order within the section.
 // Sections render as tabs or stacked panels per `variant` (default 'tabs').
@@ -23,6 +33,7 @@ const layout: VehicleTypeLayout = {
   Edit: [
     "name",
     "transportMode",
+    { field: "deckPlan", options: () => deckPlanRefs },
     "length",
     "width",
     "height",
@@ -80,6 +91,7 @@ const sample: VehicleType = {
   netexId: "VEH:VehicleType:1",
   name: { lang: "en", value: "Class 70 EMU" },
   transportMode: TransportMode.Rail,
+  deckPlan: { netexId: "VEH:DeckPlan:1" },
   length: 26.4,
   lowFloor: true,
   vehicles: sampleVehicles,
