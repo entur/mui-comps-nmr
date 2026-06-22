@@ -58,12 +58,16 @@ export const vehicleTypeLayout: VehicleTypeLayout = {
   ],
   "Dim.": ["length", "width", "height", "weight"],
   Accessibility: ["lowFloor"],
-  Propulsion: [
+  Environment: [
+    "selfPropelled",
     "propulsionTypes",
     "fuelTypes",
-    "selfPropelled",
     "maximumVelocity",
     "maximumRange",
+    "formDragCoefficient",
+    "rollResistanceCoefficient",
+    "maximumEngineEffectKW",
+    "hybridCategory",
   ],
   Capacity: [
     "totalCapacity",
@@ -73,12 +77,6 @@ export const vehicleTypeLayout: VehicleTypeLayout = {
     "pramPlaceCapacity",
     "bicycleRackCapacity",
     "fareClass",
-  ],
-  Environment: [
-    "formDragCoefficient",
-    "rollResistanceCoefficient",
-    "maximumEngineEffectKW",
-    "hybridCategory",
   ],
   Vehicles: [
     {
