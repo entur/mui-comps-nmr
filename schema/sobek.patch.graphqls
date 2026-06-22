@@ -8,6 +8,17 @@ extend type Vehicle {
   dataOwnerRef: String
 }
 
-# TODO: Add vehicleModel props in VT
+# vehicleModel props inlined onto VehicleType (manufacturer / range / full-charge).
+# Added to BOTH read + input so distill derives them as editable (not serverManaged).
+extend type VehicleType {
+  manufacturer: String
+  range: Float
+  fullCharge: Float
+}
+extend input VehicleTypeInput {
+  manufacturer: String
+  range: Float
+  fullCharge: Float
+}
 
 # TODO: Add "new mockery props" (KVs) from mural

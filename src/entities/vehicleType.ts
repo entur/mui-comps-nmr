@@ -14,11 +14,13 @@ export interface Entity {
   euroClass?: Maybe<Scalars['String']['output']>;
   formDragCoefficient?: Maybe<Scalars['Float']['output']>;
   fuelTypes?: Maybe<Array<Maybe<FuelType>>>;
+  fullCharge?: Maybe<Scalars['Float']['output']>;
   height?: Maybe<Scalars['Float']['output']>;
   hybridCategory?: Maybe<HybridCategory>;
   keyValues?: Maybe<Array<KeyValues>>;
   length?: Maybe<Scalars['Float']['output']>;
   lowFloor?: Maybe<Scalars['Boolean']['output']>;
+  manufacturer?: Maybe<Scalars['String']['output']>;
   maximumEngineEffectKW?: Maybe<Scalars['Float']['output']>;
   maximumRange?: Maybe<Scalars['Float']['output']>;
   maximumVelocity?: Maybe<Scalars['Float']['output']>;
@@ -27,6 +29,7 @@ export interface Entity {
   passengerCapacity?: Maybe<PassengerCapacity>;
   privateCode?: Maybe<PrivateCode>;
   propulsionTypes?: Maybe<Array<Maybe<PropulsionType>>>;
+  range?: Maybe<Scalars['Float']['output']>;
   rollResistanceCoefficient?: Maybe<Scalars['Float']['output']>;
   selfPropelled?: Maybe<Scalars['Boolean']['output']>;
   shortName?: Maybe<MultilingualString>;
@@ -47,10 +50,12 @@ export const FIELDS = {
   euroClass: { kind: 'text', path: ['euroClass'] },
   formDragCoefficient: { kind: 'number', path: ['formDragCoefficient'] },
   fuelTypes: { kind: 'enumMulti', path: ['fuelTypes'], options: Object.values(FuelType) },
+  fullCharge: { kind: 'number', path: ['fullCharge'] },
   height: { kind: 'number', path: ['height'] },
   hybridCategory: { kind: 'enum', path: ['hybridCategory'], options: Object.values(HybridCategory) },
   length: { kind: 'number', path: ['length'] },
   lowFloor: { kind: 'switch', path: ['lowFloor'] },
+  manufacturer: { kind: 'text', path: ['manufacturer'] },
   maximumEngineEffectKW: { kind: 'number', path: ['maximumEngineEffectKW'] },
   maximumRange: { kind: 'number', path: ['maximumRange'] },
   maximumVelocity: { kind: 'number', path: ['maximumVelocity'] },
@@ -68,6 +73,7 @@ export const FIELDS = {
   type: { kind: 'text', path: ['privateCode', 'type'] },
   value: { kind: 'text', path: ['privateCode', 'value'] },
   propulsionTypes: { kind: 'enumMulti', path: ['propulsionTypes'], options: Object.values(PropulsionType) },
+  range: { kind: 'number', path: ['range'] },
   rollResistanceCoefficient: { kind: 'number', path: ['rollResistanceCoefficient'] },
   selfPropelled: { kind: 'switch', path: ['selfPropelled'] },
   shortName: { kind: 'name', path: ['shortName'] },
