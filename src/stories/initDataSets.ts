@@ -69,15 +69,15 @@ export const vehicleTypeLayout: VehicleTypeLayout = {
     "maximumEngineEffectKW",
     "hybridCategory",
   ],
-  Capacity: [
+  Passenger: [
+    "fareClass",
     "totalCapacity",
     "seatingCapacity",
     "standingCapacity",
+    "specialPlaceCapacity",
     "wheelchairPlaceCapacity",
-    "pramPlaceCapacity",
-    "bicycleRackCapacity",
-    "fareClass",
   ],
+  Cargo: ["pushchairCapacity", "pramPlaceCapacity", "bicycleRackCapacity", "carLoading"],
   Vehicles: [
     {
       field: "vehicles",
