@@ -58,28 +58,26 @@ export const vehicleTypeLayout: VehicleTypeLayout = {
   ],
   "Dim.": ["length", "width", "height", "weight"],
   Accessibility: ["lowFloor"],
-  Propulsion: [
+  Environment: [
+    "selfPropelled",
     "propulsionTypes",
     "fuelTypes",
-    "selfPropelled",
     "maximumVelocity",
     "maximumRange",
-  ],
-  Capacity: [
-    "totalCapacity",
-    "seatingCapacity",
-    "standingCapacity",
-    "wheelchairPlaceCapacity",
-    "pramPlaceCapacity",
-    "bicycleRackCapacity",
-    "fareClass",
-  ],
-  Environment: [
     "formDragCoefficient",
     "rollResistanceCoefficient",
     "maximumEngineEffectKW",
     "hybridCategory",
   ],
+  Passenger: [
+    "fareClass",
+    "totalCapacity",
+    "seatingCapacity",
+    "standingCapacity",
+    "specialPlaceCapacity",
+    "wheelchairPlaceCapacity",
+  ],
+  Cargo: ["pushchairCapacity", "pramPlaceCapacity", "bicycleRackCapacity", "carLoading"],
   Vehicles: [
     {
       field: "vehicles",

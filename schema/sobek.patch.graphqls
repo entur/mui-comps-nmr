@@ -14,11 +14,13 @@ extend type VehicleType {
   manufacturer: String
   range: Float
   fullCharge: Float
+  carLoading: Boolean
 }
 extend input VehicleTypeInput {
   manufacturer: String
   range: Float
   fullCharge: Float
+  carLoading: Boolean
 }
 
 # TODO: Add "new mockery props" (KVs) from mural

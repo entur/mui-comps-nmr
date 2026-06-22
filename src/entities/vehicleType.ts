@@ -5,6 +5,7 @@ import { FareClass, FuelType, HybridCategory, PropulsionType, TransportMode } fr
 import type { FieldSpec, Layout as LibLayout } from '../EntityDetailsForm/types';
 /** The value shape — the full read entity, nested structure preserved. */
 export interface Entity {
+  carLoading?: Maybe<Scalars['Boolean']['output']>;
   changed?: Maybe<Scalars['DateTime']['output']>;
   changedBy?: Maybe<Scalars['String']['output']>;
   created?: Maybe<Scalars['DateTime']['output']>;
@@ -41,6 +42,7 @@ export interface Entity {
 }
 /** Flat, addressable field registry — value-object leaves hoisted, each with a path. */
 export const FIELDS = {
+  carLoading: { kind: 'switch', path: ['carLoading'] },
   changed: { kind: 'datetime', path: ['changed'], serverManaged: true },
   changedBy: { kind: 'text', path: ['changedBy'], serverManaged: true },
   created: { kind: 'datetime', path: ['created'], serverManaged: true },
