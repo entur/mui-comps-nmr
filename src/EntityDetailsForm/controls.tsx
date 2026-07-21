@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import { Autocomplete, FormControlLabel, MenuItem, Switch, TextField } from '@mui/material';
 import type { TextFieldProps } from '@mui/material';
-import type { ControlSlotProps, FieldEntry, FieldSpec, RefOption } from './types';
-import { ObjectGrid } from './ObjectGrid';
+import type { ControlSlotProps, FieldSpec, RefOption } from './types';
 
 /** A MultilingualString-ish shape: only `.value` is edited; `.lang` is preserved. */
 type Mls = { lang?: string | null; value?: string | null } | null | undefined;
@@ -39,13 +38,6 @@ export interface ControlProps {
   disabled: boolean;
   /** Emit the next raw value for this field's path (`undefined` clears it). */
   onChange: (next: unknown) => void;
-  /** True when this field is the only one in its section. A `grid` then omits
-   *  its own label (the section tab/heading already names it); ignored by the
-   *  scalar controls, which always carry their own label. */
-  solo?: boolean;
-  /** `grid` only — explicit column order/labels (the layout entry's `entries`).
-   *  Omit → columns auto-derived from row data. */
-  cols?: FieldEntry[];
   /** `reference` only — option-dataset closure (the layout entry's `options`).
    *  Present → render an Autocomplete; omit → degrade to a free-text id field. */
   options?: () => RefOption[];
@@ -71,8 +63,6 @@ export function renderControl({
   value,
   disabled,
   onChange,
-  solo,
-  cols,
   options,
   slotProps,
 }: ControlProps): ReactNode {
@@ -224,20 +214,6 @@ export function renderControl({
         />
       );
     }
-
-    case 'grid':
-      // Read-only relation table. `disabled`/`onChange` don't apply — grids are
-      // always serverManaged. `value` is the relation array at the field's path.
-      // Show the label only when sharing the section with other fields.
-      return (
-        <ObjectGrid
-          rows={value}
-          label={label}
-          showLabel={!solo}
-          cols={cols}
-          dataGrid={slotProps?.grid?.dataGrid}
-        />
-      );
 
     default:
       return null;

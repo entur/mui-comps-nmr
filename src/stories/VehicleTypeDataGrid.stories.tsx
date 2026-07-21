@@ -571,7 +571,7 @@ const Showcase = () => {
 };
 
 const meta: Meta<typeof Showcase> = {
-  title: "DataGrid/VT",
+  title: "DataGrid",
   component: Showcase,
   parameters: { layout: "fullscreen" },
 };

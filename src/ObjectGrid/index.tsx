@@ -7,8 +7,18 @@
 import { lazy, Suspense, useMemo } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 import type { DataGridProps, GridColDef } from "@mui/x-data-grid";
-import type { FieldEntry } from "./types";
-import { humanize } from "./humanize";
+import { humanize } from "../shared/humanize";
+
+/**
+ * A single grid column: a row-object property key plus an optional label
+ * override (defaults to the humanized key). This is the Grid's own, minimal prop
+ * contract — deliberately independent of the form's richer `FieldEntry`, which is
+ * structurally assignable to it. Owned here so the Grid depends on no form type.
+ */
+export interface ColumnSpec {
+  field: string;
+  label?: string;
+}
 
 /* ------------------------------------------------------------------ *\
    Constants
@@ -93,7 +103,7 @@ export interface ObjectGridProps {
   /** Explicit column order + labels (the layout entry's `entries`). Each `field`
    *  is a row-object property key; `label` overrides the humanized default.
    *  Omit → columns auto-derived from the row data in first-seen order. */
-  cols?: FieldEntry[];
+  cols?: ColumnSpec[];
   /** Passthrough to the underlying MUI X `DataGrid` (form-level `slotProps.grid.dataGrid`).
    *  Applied over the lib defaults; `sx` is merged with `GRID_SX`, while
    *  `rows`/`columns`/`aria-label` stay owned by this component. */
