@@ -24,9 +24,9 @@ const preview: Preview = {
   parameters: {
     controls: { matchers: { color: /(background|color)$/i, date: /Date$/i } },
     backgrounds: { default: 'paper' },
-    // Sidebar order: compositions on top, then Forms, then anything else A–Z.
+    // Sidebar order: compositions on top, then DataGrid, then Forms, then anything else A–Z.
     options: {
-      storySort: { order: ['compositions', 'Forms', '*'] },
+      storySort: { order: ['compositions', 'DataGrid', 'Forms', '*'] },
     },
   },
   decorators: [

@@ -9,8 +9,9 @@ import type {
   RefOption,
 } from './types';
 import { getPath, setPath } from './paths';
-import { humanize } from './humanize';
+import { humanize } from '../shared/humanize';
 import { renderControl } from './controls';
+import { ObjectGrid } from '../ObjectGrid';
 
 /** A field resolved for rendering: its registry key, display label, the optional
  *  explicit grid column entries, and (for a `reference`) the option-dataset
@@ -90,6 +91,23 @@ export function createEntityDetailsForm<E>(
       arr: ResolvedField[]
     ): ReactNode => {
       const spec = fields[key];
+      // Read-only relation grid — a distinct renderer from the editable controls.
+      // `disabled`/`onChange` don't apply (grids are always serverManaged). Alone
+      // in its section → the tab/heading names it, so the grid draws no caption;
+      // beside other fields → it shows its own to disambiguate.
+      if (spec.kind === 'grid') {
+        return (
+          <Box key={key} sx={{ mb: 2 }}>
+            <ObjectGrid
+              rows={getPath(value, spec.path)}
+              label={label}
+              showLabel={arr.length > 1}
+              cols={cols}
+              dataGrid={slotProps?.grid?.dataGrid}
+            />
+          </Box>
+        );
+      }
       const disabled = mode === 'view' || !!spec.serverManaged;
       const control = renderControl({
         spec,
@@ -97,11 +115,6 @@ export function createEntityDetailsForm<E>(
         value: getPath(value, spec.path),
         disabled,
         onChange: next => onChange(setPath(value, spec.path, next) as E),
-        // Alone in its section → the tab/heading names it; a grid then draws no
-        // label. Beside other fields → the grid shows its own label to disambiguate.
-        solo: arr.length <= 1,
-        // Grid column order/labels from the layout entry's `entries` (if any).
-        cols,
         // `reference` option-dataset closure from the layout entry (if any).
         options,
         // Per-kind MUI overrides; `renderControl` picks the slice for `spec.kind`.
