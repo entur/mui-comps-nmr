@@ -15,7 +15,10 @@ const config: CodegenConfig = {
   schema: ['./schema/sobek.schema.graphqls', './schema/sobek.patch.graphqls'],
   generates: {
     'src/generated/sobekTypes.ts': {
-      plugins: ['typescript'],
+      plugins: [
+        { add: { content: `export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };\n` } },
+        'typescript',
+      ],
       config: {
         enumsAsTypes: false,
         scalars: { DateTime: 'string', Long: 'number' },

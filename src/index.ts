@@ -1,11 +1,12 @@
 /**
  * Public API of `@entur/mui-comps-nmr`.
  *
- * The generic form factory + its types, plus the generated per-entity types and
- * field registries (from the distilled `src/entities` barrel). Consumers never
- * import from `generated/` directly.
+ * The generic form factory + data-aware form implementations, plus the
+ * generated per-entity types and field registries. Consumers never import
+ * from `generated/` directly.
  */
-export { createEntityDetailsForm } from './EntityDetailsForm';
+export { createAbstractEntityDetailsForm } from './EntityDetailsForm/abstractForm';
+export { VehicleForm, VehicleTypeForm } from './EntityDetailsForm/formImpls';
 export type {
   EntityDetailsFormProps,
   EntityDetailsForm,

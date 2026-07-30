@@ -9,7 +9,7 @@ export interface Entity {
   changed?: Maybe<Scalars['DateTime']['output']>;
   changedBy?: Maybe<Scalars['String']['output']>;
   created?: Maybe<Scalars['DateTime']['output']>;
-  dataOwnerRef?: Maybe<Scalars['String']['output']>;
+  dataOwnerRef: Scalars['String']['output'];
   deckPlan?: Maybe<DeckPlan>;
   description?: Maybe<MultilingualString>;
   euroClass?: Maybe<Scalars['String']['output']>;

@@ -117,6 +117,10 @@ export interface EntityDetailsFormProps<E> {
   /** Per-kind MUI overrides (see `ControlSlotProps`). Applies to every field of
    *  the given kind; per-field overrides are a planned later addition. */
   slotProps?: ControlSlotProps;
+  /** Field-key → server error message (e.g. from validation). */
+  errors?: Record<string, string>;
+  /** Global disable (e.g. while loading or saving). */
+  disabled?: boolean;
 }
 
 /** A factory-built form component. */
