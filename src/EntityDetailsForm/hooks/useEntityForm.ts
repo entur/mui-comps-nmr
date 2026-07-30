@@ -85,7 +85,12 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
   // Load entity by netexId once auth headers are resolved.
   useEffect(() => {
     if (!netexId || !authHeaders) {
-      if (mounted.current && !authHeaders) setValue(undefined);
+      // Clear stale state when we switch from edit (netexId set) to create
+      // (netexId undefined) or while auth headers are still resolving.
+      if (mounted.current) {
+        setValue(undefined);
+        setErrors({});
+      }
       return;
     }
 

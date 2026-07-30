@@ -62,6 +62,51 @@ describe('useEntityForm', () => {
     expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, { filter: { netexIds: ['VEH:1'] } });
   });
 
+  it('clears value when netexId is removed', async () => {
+    mockFns.request.mockResolvedValueOnce({
+      vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
+    });
+
+    const { result, rerender } = renderHook(
+      (props: UseEntityFormProps) => useEntityForm(props),
+      {
+        initialProps: {
+          fields,
+          endpoint: 'http://test',
+          netexId: 'VEH:1',
+          query: {
+            document: vehicleDoc,
+            variables: (id: string) => ({ filter: { netexIds: [id] } }),
+            resultPath: ['vehicles', 'content', 0] as const,
+          },
+          mutation: {
+            document: mutationDoc,
+            resultPath: ['createOrUpdateVehicle'] as const,
+          },
+        } as UseEntityFormProps,
+      }
+    );
+
+    await waitFor(() => expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram' } }));
+
+    rerender({
+      fields,
+      endpoint: 'http://test',
+      query: {
+        document: vehicleDoc,
+        variables: (id: string) => ({ filter: { netexIds: [id] } }),
+        resultPath: ['vehicles', 'content', 0] as const,
+      },
+      mutation: {
+        document: mutationDoc,
+        resultPath: ['createOrUpdateVehicle'] as const,
+      },
+    });
+
+    expect(result.current.value).toBeUndefined();
+    expect(result.current.loading).toBe(false);
+  });
+
   it('does not load when netexId is omitted', () => {
     const { result } = renderHook(() =>
       useEntityForm({
