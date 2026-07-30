@@ -101,6 +101,39 @@ function pruneSelections(
   return { ...node, selectionSet: { ...node.selectionSet, selections } };
 }
 
+/**
+ * Fail fast if a configured relation field is present but was truncated by
+ * `depthLimit`, leaving no `netexId` selected. Otherwise the wrapper would
+ * receive a partial relation object and `toInputEntity` would drop it.
+ */
+function assertRelationsSelected(
+  entry: ParsedEntry,
+  node: FieldNode,
+  path: string[]
+): void {
+  const relations = new Set(entry.relationFields ?? []);
+
+  function walk(n: FieldNode, p: string[]): void {
+    if (relations.has(n.name.value) && n.selectionSet) {
+      const hasNetexId = n.selectionSet.selections.some(
+        s => s.kind === 'Field' && s.name.value === RELATION_ID_FIELD
+      );
+      if (!hasNetexId) {
+        throw new Error(
+          `[generateDocuments] relation field "${n.name.value}" at ${p.join('.')} was truncated by depthLimit=${OPERATION_DEPTH_LIMIT}; increase the limit or adjust the schema policy for ${entry.entity}`
+        );
+      }
+    }
+
+    if (!n.selectionSet) return;
+    for (const sel of n.selectionSet.selections) {
+      if (sel.kind === 'Field') walk(sel, [...p, sel.name.value]);
+    }
+  }
+
+  walk(node, path);
+}
+
 const buildQueryDocument = (
   entry: ParsedEntry,
   schema: ReturnType<typeof buildSchema>
@@ -116,6 +149,7 @@ const buildQueryDocument = (
   const ignore = new Set(entry.ignore ?? []);
   const relations = new Set(entry.relationFields ?? []);
   const prunedRoot = pruneSelections(rootField, [entry.queryRoot], ignore, relations);
+  assertRelationsSelected(entry, prunedRoot, [entry.queryRoot]);
 
   const filterType = `${entry.entity}Filter`;
   const opName = `Get${entry.entity}`;
