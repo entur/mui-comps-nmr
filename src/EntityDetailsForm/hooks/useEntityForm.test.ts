@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
+import type { UseEntityFormProps } from './useEntityForm';
 import { useEntityForm } from './useEntityForm';
 import type { FieldSpec } from '../types';
 
@@ -112,6 +113,115 @@ describe('useEntityForm', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.errors).toEqual({ __init: 'Failed to load' });
     expect(result.current.value).toBeUndefined();
+  });
+
+  it('waits for async getHeaders before loading', async () => {
+    let resolveHeaders: (h: Record<string, string>) => void = () => {};
+    const getHeaders = () =>
+      new Promise<Record<string, string>>(resolve => {
+        resolveHeaders = resolve;
+      });
+
+    mockFns.request.mockResolvedValueOnce({
+      vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
+    });
+
+    const { result } = renderHook(
+      (props: UseEntityFormProps) => useEntityForm(props),
+      {
+        initialProps: {
+          fields,
+          endpoint: 'http://test',
+          netexId: 'VEH:1',
+          getHeaders,
+          query: {
+            document: vehicleDoc,
+            variables: (id: string) => ({ filter: { netexIds: [id] } }),
+            resultPath: ['vehicles', 'content', 0] as const,
+          },
+          mutation: {
+            document: mutationDoc,
+            resultPath: ['createOrUpdateVehicle'] as const,
+          },
+        },
+      }
+    );
+
+    // Should not issue the request while dynamic headers are still pending.
+    expect(result.current.loading).toBe(false);
+    expect(mockFns.request).not.toHaveBeenCalled();
+
+    act(() => resolveHeaders({ Authorization: 'Bearer token' }));
+
+    // After headers resolve, the request runs with merged static + dynamic headers.
+    await waitFor(() => expect(mockFns.request).toHaveBeenCalled());
+
+    expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram' } });
+    expect(mockFns.setHeaders).toHaveBeenLastCalledWith({ Authorization: 'Bearer token' });
+    expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, { filter: { netexIds: ['VEH:1'] } });
+  });
+
+  it('ignores a stale response when netexId changes', async () => {
+    let resolveA: (data: unknown) => void = () => {};
+
+    mockFns.request
+      .mockImplementationOnce(
+        () => new Promise(resolve => {
+          resolveA = resolve;
+        })
+      )
+      .mockResolvedValueOnce({
+        vehicles: { content: [{ netexId: 'VEH:2', name: { value: 'Bus' } }] },
+      });
+
+    const { result, rerender } = renderHook(
+      (props: UseEntityFormProps) => useEntityForm(props),
+      {
+        initialProps: {
+          fields,
+          endpoint: 'http://test',
+          netexId: 'VEH:1',
+          query: {
+            document: vehicleDoc,
+            variables: (id: string) => ({ filter: { netexIds: [id] } }),
+            resultPath: ['vehicles', 'content', 0] as const,
+          },
+          mutation: {
+            document: mutationDoc,
+            resultPath: ['createOrUpdateVehicle'] as const,
+          },
+        },
+      }
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(true));
+
+    rerender({
+      fields,
+      endpoint: 'http://test',
+      netexId: 'VEH:2',
+      query: {
+        document: vehicleDoc,
+        variables: (id: string) => ({ filter: { netexIds: [id] } }),
+        resultPath: ['vehicles', 'content', 0] as const,
+      },
+      mutation: {
+        document: mutationDoc,
+        resultPath: ['createOrUpdateVehicle'] as const,
+      },
+    });
+
+    // Resolve the newer request first.
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.value).toEqual({ netexId: 'VEH:2', name: { value: 'Bus' } });
+
+    // Now resolve the stale request for VEH:1.
+    act(() => resolveA({ vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] } }));
+
+    // The stale response must not overwrite the current value.
+    await new Promise(r => setTimeout(r, 50));
+    expect(result.current.value).toEqual({ netexId: 'VEH:2', name: { value: 'Bus' } });
+    expect(result.current.errors).toEqual({});
   });
 
   it('saves, returns the id, and refetches', async () => {
