@@ -9,12 +9,17 @@ export function normalizeEntityErrors(
   const errs = (error as any)?.response?.errors ?? [];
 
   for (const err of errs) {
-    const path: string[] = err.path ?? [];
+    const path: Array<string | number> = err.path ?? [];
     const idx = path.indexOf('input');
-    const key = idx >= 0 ? path[idx + 1] : undefined;
+    const inputPath = idx >= 0 ? path.slice(idx + 1).filter((p): p is string => typeof p === 'string') : [];
 
-    if (key && key in fields && !fields[key].serverManaged) {
-      fieldErrors[key] = err.message;
+    const fieldKey = Object.entries(fields).find(([, spec]) => {
+      if (spec.serverManaged) return false;
+      return spec.path.join('.') === inputPath.join('.');
+    })?.[0];
+
+    if (fieldKey) {
+      fieldErrors[fieldKey] = err.message;
     } else {
       generalErrors.push(err.message);
     }
