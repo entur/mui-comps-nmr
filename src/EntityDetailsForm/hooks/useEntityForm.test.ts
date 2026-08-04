@@ -62,7 +62,7 @@ describe('useEntityForm', () => {
     expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, { filter: { netexIds: ['VEH:1'] } });
   });
 
-  it('clears value when netexId is removed', async () => {
+  it('keeps the loaded value when netexId is removed (create mode preserves edits)', async () => {
     mockFns.request.mockResolvedValueOnce({
       vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
     });
@@ -103,7 +103,10 @@ describe('useEntityForm', () => {
       },
     });
 
-    expect(result.current.value).toBeUndefined();
+    // Removing netexId no longer wipes state: the load effect early-returns on a
+    // missing netexId (create mode), so any in-progress value is preserved rather
+    // than cleared.
+    expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram' } });
     expect(result.current.loading).toBe(false);
   });
 
