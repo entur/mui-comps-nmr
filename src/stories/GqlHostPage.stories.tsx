@@ -1,4 +1,4 @@
-import { useCallback, useState, type FC } from "react";
+import { useCallback, useMemo, useState, type FC } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   Alert,
@@ -16,7 +16,13 @@ import {
   Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import { VehicleForm, VehicleTypeForm, type Layout } from "../index";
+import {
+  VehicleForm,
+  VehicleTypeForm,
+  type Layout,
+  type LayoutVariant,
+  type ControlSlotProps,
+} from "../index";
 import { vehicleSeed, vehicleTypeSeed } from "./initDataSets";
 import { vehicleLayout, vehicleTypeLayout } from "./initLayouts";
 import { MOCK_ENDPOINT, installStoriesMock } from "./mockEndpoint";
@@ -26,7 +32,7 @@ import { MOCK_ENDPOINT, installStoriesMock } from "./mockEndpoint";
  * package-exported VehicleForm / VehicleTypeForm (they load + save over GraphQL)
  * against an in-browser mock endpoint. Two stacked record lists — Vehicle types
  * and Vehicles — share one detail pane: clicking an item in either list
- * activates that entity's form flavour. Reproduces the host-guide "complete host
+ * activates that entity's form. Reproduces the host-guide "complete host
  * page" (list → select → view/edit → save) with one addition over that snippet:
  * a live status surface (Snackbar on onSaved/onError) so the async save
  * lifecycle the guide only describes in prose is actually visible.
@@ -39,11 +45,55 @@ const ENDPOINT = MOCK_ENDPOINT;
 const LIST_WIDTH = 260;
 const NEW_KEY = "new";
 
-/** Which entity flavour the detail pane is showing. */
-type Flavour = "vehicleType" | "vehicle";
+/**
+ * How a multi-section form presents its sections (mirrors DumbAppMock):
+ * - `none`     → no tab bar (stacked sections).
+ * - `one-line` → scrollable tabs on one row, `>` chevrons for overflow.
+ * - `pills`    → wrapping filled-pill tabs (hathor's VehicleTypeForm style).
+ */
+type TabStyle = "none" | "one-line" | "pills";
 
-/** A selected record; `netexId` omitted ⇒ a blank "new" form of that flavour. */
-type Selection = { flavour: Flavour; netexId?: string };
+/** `slotProps` reproducing hathor's wrapping pill tabs: `standard` variant (so
+ *  the row can wrap) + a flex-wrap container + filled-pill tab styling. */
+const PILL_TABS_SX = {
+  minHeight: 0,
+  "& .MuiTabs-indicator": { display: "none" },
+  "& .MuiTabs-flexContainer": { flexWrap: "wrap", gap: 0.75 },
+  "& .MuiTab-root": {
+    minHeight: 30,
+    px: 1.25,
+    py: 0.25,
+    borderRadius: 1,
+    textTransform: "none",
+    bgcolor: "action.hover",
+    color: "text.secondary",
+  },
+  "& .MuiTab-root.Mui-selected": {
+    bgcolor: "primary.main",
+    color: "primary.contrastText",
+  },
+} as const;
+
+/** Derive a form's `variant` + Tabs `slotProps` from a {@link TabStyle}. */
+const deriveTabs = (
+  tabStyle: TabStyle,
+): { variant: LayoutVariant; slotProps: ControlSlotProps } => {
+  if (tabStyle === "none") return { variant: "stacked", slotProps: {} };
+  if (tabStyle === "pills")
+    return { variant: "tabs", slotProps: { tabs: { variant: "standard", sx: PILL_TABS_SX } } };
+  return {
+    variant: "tabs",
+    slotProps: {
+      tabs: { variant: "scrollable", scrollButtons: "auto", allowScrollButtonsMobile: true },
+    },
+  };
+};
+
+/** Which entity the detail pane is showing. */
+type entity = "vehicleType" | "vehicle";
+
+/** A selected record; `netexId` omitted ⇒ a blank "new" form of that entity. */
+type Selection = { entity: entity; netexId?: string };
 
 /** Snackbar payload: a message plus which severity to colour it. */
 type Toast = { msg: string; severity: "success" | "error" };
@@ -55,6 +105,8 @@ type DataAwareForm = FC<{
   getHeaders?: () => Record<string, string> | Promise<Record<string, string>>;
   netexId?: string;
   mode?: "view" | "edit";
+  variant?: LayoutVariant;
+  slotProps?: ControlSlotProps;
   layout?: Layout;
   onSaved?: (netexId: string) => void;
   onError?: (generalErrors: string[]) => void;
@@ -63,9 +115,9 @@ type DataAwareForm = FC<{
 /** Minimal record shape the lists need from either entity. */
 type Rec = { netexId: string; name?: { value?: string | null } | null };
 
-/** Per-flavour wiring: its form component, layout, seed, and list labels. */
-const FLAVOURS: Record<
-  Flavour,
+/** Per-entity wiring: its form component, layout, seed, and list labels. */
+const ENTITY: Record<
+  entity,
   {
     Form: DataAwareForm;
     layout: Layout;
@@ -90,7 +142,14 @@ const FLAVOURS: Record<
   },
 };
 
-const FLAVOUR_ORDER: Flavour[] = ["vehicleType", "vehicle"];
+const ENTITY_ORDER: entity[] = ["vehicleType", "vehicle"];
+
+/** Story-adjustable props, surfaced as Storybook Controls. */
+interface GqlHostPageProps {
+  /** How multi-section forms (VehicleType) present sections. Single-section
+   *  Vehicle renders flat regardless. */
+  tabStyle?: TabStyle;
+}
 
 /**
  * Single host screen with two stacked record lists (Vehicle types + Vehicles)
@@ -98,9 +157,10 @@ const FLAVOUR_ORDER: Flavour[] = ["vehicleType", "vehicle"];
  * data-aware form; the pane owns the four host concerns — stable auth headers,
  * new-vs-edit via `netexId`, discard via remount `key`, and reacting to saves.
  */
-const GqlHostPage = () => {
+const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
+  const { variant, slotProps } = useMemo(() => deriveTabs(tabStyle), [tabStyle]);
   const [selection, setSelection] = useState<Selection | null>({
-    flavour: "vehicle",
+    entity: "vehicle",
     netexId: "VEH:Vehicle:701",
   });
   const [mode, setMode] = useState<"view" | "edit">("view");
@@ -115,8 +175,8 @@ const GqlHostPage = () => {
     [],
   );
 
-  const selectRecord = (flavour: Flavour, netexId?: string) => {
-    setSelection({ flavour, netexId });
+  const selectRecord = (entity: entity, netexId?: string) => {
+    setSelection({ entity, netexId });
     setMode(netexId ? "view" : "edit"); // existing → view; new → straight to edit
   };
   const cancel = () => {
@@ -124,7 +184,7 @@ const GqlHostPage = () => {
     setMode("view");
   };
 
-  const active = selection ? FLAVOURS[selection.flavour] : null;
+  const active = selection ? ENTITY[selection.entity] : null;
   const Form = active?.Form;
 
   return (
@@ -132,7 +192,7 @@ const GqlHostPage = () => {
       elevation={0}
       sx={{ display: "flex", minHeight: "100vh", bgcolor: "grey.100" }}
     >
-      {/* Left: two stacked record lists, one per flavour. */}
+      {/* Left: two stacked record lists, one per entity. */}
       <Box
         sx={{
           width: LIST_WIDTH,
@@ -143,10 +203,10 @@ const GqlHostPage = () => {
           overflowY: "auto",
         }}
       >
-        {FLAVOUR_ORDER.map((flavour) => {
-          const cfg = FLAVOURS[flavour];
+        {ENTITY_ORDER.map((entity) => {
+          const cfg = ENTITY[entity];
           return (
-            <Box key={flavour}>
+            <Box key={entity}>
               <List
                 dense
                 subheader={
@@ -166,7 +226,7 @@ const GqlHostPage = () => {
                       edge="end"
                       aria-label={cfg.newLabel}
                       title={cfg.newLabel}
-                      onClick={() => selectRecord(flavour)}
+                      onClick={() => selectRecord(entity)}
                     >
                       <AddIcon fontSize="small" />
                     </IconButton>
@@ -177,10 +237,10 @@ const GqlHostPage = () => {
                   <ListItemButton
                     key={r.netexId}
                     selected={
-                      selection?.flavour === flavour &&
+                      selection?.entity === entity &&
                       selection?.netexId === r.netexId
                     }
-                    onClick={() => selectRecord(flavour, r.netexId)}
+                    onClick={() => selectRecord(entity, r.netexId)}
                   >
                     <ListItemText
                       primary={r.name?.value ?? r.netexId}
@@ -195,7 +255,7 @@ const GqlHostPage = () => {
         })}
       </Box>
 
-      {/* Right: the selected flavour's data-aware form + host chrome. */}
+      {/* Right: the selected entity's data-aware form + host chrome. */}
       <Box sx={{ flex: 1, minWidth: 0, p: { xs: 2, sm: 4 } }}>
         {selection && active && Form ? (
           <>
@@ -224,15 +284,17 @@ const GqlHostPage = () => {
               sx={{ p: { xs: 2, sm: 3 }, maxWidth: 680 }}
             >
               <Form
-                // New key ⇒ remount: clean flavour/record switch + discard on cancel.
-                key={`${selection.flavour}:${selection.netexId ?? NEW_KEY}:${rev}`}
+                // New key ⇒ remount: clean entity/record switch + discard on cancel.
+                key={`${selection.entity}:${selection.netexId ?? NEW_KEY}:${rev}`}
                 endpoint={ENDPOINT}
                 getHeaders={getHeaders}
                 netexId={selection.netexId}
                 mode={mode}
+                variant={variant}
+                slotProps={slotProps}
                 layout={active.layout}
                 onSaved={(id) => {
-                  setSelection({ flavour: selection.flavour, netexId: id });
+                  setSelection({ entity: selection.entity, netexId: id });
                   setMode("view");
                   setToast({ msg: `Saved ${id}`, severity: "success" });
                 }}
@@ -276,6 +338,15 @@ const meta: Meta<typeof GqlHostPage> = {
   title: "compositions/GqlHostPages",
   component: GqlHostPage,
   parameters: { layout: "fullscreen" },
+  args: { tabStyle: "one-line" },
+  argTypes: {
+    tabStyle: {
+      control: "inline-radio",
+      options: ["none", "one-line", "pills"],
+      description:
+        "How multi-section forms (VehicleType) present sections: none = stacked (no tabs), one-line = scrollable tab row, pills = wrapping pill tabs. Vehicle is single-section, so unaffected.",
+    },
+  },
 };
 export default meta;
 type Story = StoryObj<typeof GqlHostPage>;
