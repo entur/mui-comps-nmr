@@ -20,8 +20,8 @@ import {
 import { TransportMode, type Vehicle as GenVehicle } from "../generated/sobekTypes";
 
 // The client names its own instances — the library exports only the factory.
-export const VehicleForm = createAbstractEntityDetailsForm<Vehicle>(vehicleFields);
-export const VehicleTypeForm = createAbstractEntityDetailsForm<VehicleType>(vehicleTypeFields);
+export const DumbVehicleForm = createAbstractEntityDetailsForm<Vehicle>(vehicleFields);
+export const DumbVehicleTypeForm = createAbstractEntityDetailsForm<VehicleType>(vehicleTypeFields);
 
 // ── reference option-lists ────────────────────────────────────────────────
 // In a real app these come from a query; here they are static. A layout entry's
