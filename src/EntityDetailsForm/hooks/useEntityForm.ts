@@ -147,6 +147,7 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
         setErrors({});
         onSaved?.(returnedId);
       }
+    } catch (e) {
       if (mounted.current && requestId === requestIdRef.current) {
         const { fieldErrors, generalErrors } = normalizeEntityErrors(e, fields);
         setErrors(fieldErrors);
