@@ -1,23 +1,14 @@
 /**
- * Data fixtures for the form stories — the form instances and the sample
- * entities they render. Layout config (section/field arrangement) and the
- * reference option-lists live in `initLayouts.ts`; keeping the two apart
- * separates *what's in* an entity from *how* its fields are grouped.
+ * Data fixtures for the form stories — the sample entities the forms render and
+ * the read-side seed the data-aware story serves. Each story mints its own form
+ * instance from the factory; layout config (section/field arrangement) and the
+ * reference option-lists live in `initLayouts.ts`. Keeping these apart separates
+ * *what's in* an entity from *how* its fields are grouped, and from *what* renders it.
  */
-import {
-  createAbstractEntityDetailsForm,
-  vehicleFields,
-  vehicleTypeFields,
-  type Vehicle,
-  type VehicleType,
-} from "../index";
+import type { Vehicle, VehicleType } from "../index";
 // Generated `Vehicle` (aliased) is the nested grid-row shape on VehicleType;
 // distinct from the index `Vehicle` entity used as the Vehicle-form value.
 import { TransportMode, type Vehicle as GenVehicle } from "../generated/sobekTypes";
-
-// The client names its own instances — the library exports only the factory.
-export const DumbVehicleForm = createAbstractEntityDetailsForm<Vehicle>(vehicleFields);
-export const DumbVehicleTypeForm = createAbstractEntityDetailsForm<VehicleType>(vehicleTypeFields);
 
 // ── VehicleType ─────────────────────────────────────────────────────────────
 

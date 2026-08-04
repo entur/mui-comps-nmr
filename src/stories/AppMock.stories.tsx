@@ -17,15 +17,21 @@ import {
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import CloseIcon from "@mui/icons-material/Close";
-import type { Vehicle, VehicleType } from "../index";
 import {
-  VehicleForm,
-  VehicleTypeForm,
-  vehicleLayout,
-  vehicleTypeLayout,
-  vehicleSample,
-  vehicleTypeSample,
-} from "./initDataSets";
+  createAbstractEntityDetailsForm,
+  vehicleFields,
+  vehicleTypeFields,
+  type Vehicle,
+  type VehicleType,
+} from "../index";
+import { vehicleSample, vehicleTypeSample } from "./initDataSets";
+import { vehicleLayout, vehicleTypeLayout } from "./initLayouts";
+
+// Presentational (controlled) form instances — this mock owns the value/onChange
+// and save UX itself. The library exports only the factory; the client names its
+// own instances.
+const DumbVehicleForm = createAbstractEntityDetailsForm<Vehicle>(vehicleFields);
+const DumbVehicleTypeForm = createAbstractEntityDetailsForm<VehicleType>(vehicleTypeFields);
 
 // Width of the form Drawer (right anchor).
 const DRAWER_WIDTH = 480;
@@ -266,7 +272,7 @@ const AppMock = () => {
               </IconButton>
             </Box>
             {open === "type" && (
-              <VehicleTypeForm
+              <DumbVehicleTypeForm
                 mode={mode}
                 variant={variant}
                 slotProps={slotProps}
@@ -276,7 +282,7 @@ const AppMock = () => {
               />
             )}
             {open === "vehicle" && (
-              <VehicleForm
+              <DumbVehicleForm
                 mode={mode}
                 variant={variant}
                 slotProps={slotProps}
@@ -382,7 +388,7 @@ const SaveOrCancelMock = () => {
               }}
             >
               {open === "type" && (
-                <VehicleTypeForm
+                <DumbVehicleTypeForm
                   mode="edit"
                   variant={variant}
                   slotProps={slotProps}
@@ -392,7 +398,7 @@ const SaveOrCancelMock = () => {
                 />
               )}
               {open === "vehicle" && (
-                <VehicleForm
+                <DumbVehicleForm
                   mode="edit"
                   variant={variant}
                   slotProps={slotProps}
