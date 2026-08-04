@@ -34,7 +34,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "pretypecheck": "npm run generate",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky"
   },
   "peerDependencies": {
     "@emotion/react": "^11.14.0",
@@ -67,6 +68,7 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.0.0",
     "graphql": "^16.11.0",
+    "husky": "^9.1.7",
     "jsdom": "^26.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
