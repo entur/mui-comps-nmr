@@ -6,7 +6,8 @@ import {
   type VehicleType,
   type EntityDetailsFormProps,
 } from "../index";
-import { vehicleTypeLayout, vehicleTypeSample } from "./initDataSets";
+import { vehicleTypeSample } from "./initDataSets";
+import { vehicleTypeLayout } from "./initLayouts";
 // The client names its own instances — the library exports only the factory.
 
 const DumbVehicleTypeForm =
