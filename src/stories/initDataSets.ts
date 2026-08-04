@@ -28,6 +28,33 @@ export const vehicleTypeSample: VehicleType = {
   vehicles: sampleVehicles,
 };
 
+/**
+ * A few VehicleTypes keyed by `netexId` — the read-side seed the data-aware host
+ * story serves so its VehicleType list has more than one record. Each derives
+ * from {@link vehicleTypeSample}, overriding the identifying fields.
+ */
+export const vehicleTypeSeed: Record<string, VehicleType> = {
+  [vehicleTypeSample.netexId]: vehicleTypeSample,
+  "VEH:VehicleType:2": {
+    ...vehicleTypeSample,
+    netexId: "VEH:VehicleType:2",
+    name: { lang: "en", value: "Class 80 DMU" },
+    deckPlan: { netexId: "VEH:DeckPlan:2", dataOwnerRef: "" },
+    length: 23.0,
+    lowFloor: false,
+    vehicles: [],
+  },
+  "VEH:VehicleType:3": {
+    ...vehicleTypeSample,
+    netexId: "VEH:VehicleType:3",
+    name: { lang: "en", value: "Articulated Tram" },
+    deckPlan: { netexId: "VEH:DeckPlan:3", dataOwnerRef: "" },
+    length: 32.0,
+    lowFloor: true,
+    vehicles: [],
+  },
+};
+
 // ── Vehicle ───────────────────────────────────────────────────────────────
 
 export const vehicleSample: Vehicle = {
