@@ -31,7 +31,8 @@ import { vehicleLayout, vehicleTypeLayout } from "./initLayouts";
 // and save UX itself. The library exports only the factory; the client names its
 // own instances.
 const DumbVehicleForm = createAbstractEntityDetailsForm<Vehicle>(vehicleFields);
-const DumbVehicleTypeForm = createAbstractEntityDetailsForm<VehicleType>(vehicleTypeFields);
+const DumbVehicleTypeForm =
+  createAbstractEntityDetailsForm<VehicleType>(vehicleTypeFields);
 
 // Width of the form Drawer (right anchor).
 const DRAWER_WIDTH = 480;
@@ -537,7 +538,7 @@ const SaveOrCancelMock = () => {
 };
 
 const meta: Meta<typeof AppMock> = {
-  title: "compositions/AppMock",
+  title: "compositions/AppMock1stEd",
   component: AppMock,
   parameters: { layout: "fullscreen" },
 };
