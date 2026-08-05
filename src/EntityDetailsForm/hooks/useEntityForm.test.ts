@@ -20,93 +20,79 @@ vi.mock('graphql-request', () => ({
 const vehicleDoc = { kind: 'Document' } as any;
 const mutationDoc = { kind: 'Document' } as any;
 
+const ENDPOINT = 'http://test';
+const TRAM = { netexId: 'VEH:1', name: { value: 'Tram' } };
+const BUS = { netexId: 'VEH:2', name: { value: 'Bus' } };
+
 const fields: Record<string, FieldSpec> = {
   netexId: { kind: 'text', path: ['netexId'] },
   name: { kind: 'name', path: ['name'] },
   version: { kind: 'text', path: ['version'], serverManaged: true },
 };
 
+/** Wraps an entity in the query's `vehicles.content[0]` result envelope. */
+const envelope = (entity: unknown) => ({ vehicles: { content: [entity] } });
+
+/**
+ * Builds hook props with the standard Vehicle query/mutation config.
+ *
+ * Every call mints fresh object literals — matching a host that passes inline
+ * props each render, which the hook must tolerate without re-loading.
+ *
+ * @param {Partial<UseEntityFormProps>} over - per-test overrides (netexId, headers, callbacks…).
+ * @returns {UseEntityFormProps} props ready for `renderHook`.
+ */
+const mkProps = (over: Partial<UseEntityFormProps> = {}): UseEntityFormProps => ({
+  fields,
+  endpoint: ENDPOINT,
+  query: {
+    document: vehicleDoc,
+    variables: (id: string) => ({ filter: { netexIds: [id] } }),
+    resultPath: ['vehicles', 'content', 0] as const,
+  },
+  mutation: {
+    document: mutationDoc,
+    resultPath: ['createOrUpdateVehicle'] as const,
+  },
+  ...over,
+});
+
+const renderForm = (props: UseEntityFormProps) =>
+  renderHook((p: UseEntityFormProps) => useEntityForm(p), { initialProps: props });
+
 describe('useEntityForm', () => {
   beforeEach(() => {
     mockFns.request.mockReset();
+    mockFns.setHeaders.mockReset();
   });
 
   it('loads an entity on mount when netexId is provided', async () => {
-    mockFns.request.mockResolvedValueOnce({
-      vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
-    });
+    mockFns.request.mockResolvedValueOnce(envelope(TRAM));
 
-    const { result } = renderHook(() =>
-      useEntityForm({
-        fields,
-        endpoint: 'http://test',
-        netexId: 'VEH:1',
-        query: {
-          document: vehicleDoc,
-          variables: (id: string) => ({ filter: { netexIds: [id] } }),
-          resultPath: ['vehicles', 'content', 0] as const,
-        },
-        mutation: {
-          document: mutationDoc,
-          resultPath: ['createOrUpdateVehicle'] as const,
-        },
-      })
-    );
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1' }));
 
     expect(result.current.loading).toBe(true);
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram' } });
+    expect(result.current.value).toEqual(TRAM);
     expect(result.current.errors).toEqual({});
     expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, { filter: { netexIds: ['VEH:1'] } });
   });
 
   it('keeps the loaded value when netexId is removed (create mode preserves edits)', async () => {
-    mockFns.request.mockResolvedValueOnce({
-      vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
-    });
+    mockFns.request.mockResolvedValueOnce(envelope(TRAM));
 
-    const { result, rerender } = renderHook(
-      (props: UseEntityFormProps) => useEntityForm(props),
-      {
-        initialProps: {
-          fields,
-          endpoint: 'http://test',
-          netexId: 'VEH:1',
-          query: {
-            document: vehicleDoc,
-            variables: (id: string) => ({ filter: { netexIds: [id] } }),
-            resultPath: ['vehicles', 'content', 0] as const,
-          },
-          mutation: {
-            document: mutationDoc,
-            resultPath: ['createOrUpdateVehicle'] as const,
-          },
-        } as UseEntityFormProps,
-      }
-    );
+    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
 
-    await waitFor(() => expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram' } }));
+    await waitFor(() => expect(result.current.value).toEqual(TRAM));
 
-    rerender({
-      fields,
-      endpoint: 'http://test',
-      query: {
-        document: vehicleDoc,
-        variables: (id: string) => ({ filter: { netexIds: [id] } }),
-        resultPath: ['vehicles', 'content', 0] as const,
-      },
-      mutation: {
-        document: mutationDoc,
-        resultPath: ['createOrUpdateVehicle'] as const,
-      },
-    });
+    rerender(mkProps());
 
     // Removing netexId no longer wipes state: the load effect early-returns on a
     // missing netexId (create mode), so any in-progress value is preserved rather
     // than cleared.
-    expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram' } });
+    expect(result.current.value).toEqual(TRAM);
     expect(result.current.loading).toBe(false);
   });
 
@@ -118,35 +104,17 @@ describe('useEntityForm', () => {
       })
     );
 
-    const mkProps = (netexId?: string): UseEntityFormProps => ({
-      fields,
-      endpoint: 'http://test',
-      netexId,
-      query: {
-        document: vehicleDoc,
-        variables: (id: string) => ({ filter: { netexIds: [id] } }),
-        resultPath: ['vehicles', 'content', 0] as const,
-      },
-      mutation: {
-        document: mutationDoc,
-        resultPath: ['createOrUpdateVehicle'] as const,
-      },
-    });
-
-    const { result, rerender } = renderHook(
-      (props: UseEntityFormProps) => useEntityForm(props),
-      { initialProps: mkProps('VEH:1') }
-    );
+    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
 
     await waitFor(() => expect(result.current.loading).toBe(true));
 
     // Host drops netexId (edit -> create) while the load is still in flight.
-    rerender(mkProps(undefined));
+    rerender(mkProps());
     expect(result.current.loading).toBe(false);
 
     // The late response belongs to the abandoned edit form — it must not
     // repopulate the create form.
-    act(() => resolveLoad({ vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] } }));
+    act(() => resolveLoad(envelope(TRAM)));
     await new Promise(r => setTimeout(r, 50));
 
     expect(result.current.value).toBeUndefined();
@@ -154,21 +122,7 @@ describe('useEntityForm', () => {
   });
 
   it('does not load when netexId is omitted', () => {
-    const { result } = renderHook(() =>
-      useEntityForm({
-        fields,
-        endpoint: 'http://test',
-        query: {
-          document: vehicleDoc,
-          variables: (id: string) => ({ filter: { netexIds: [id] } }),
-          resultPath: ['vehicles', 'content', 0] as const,
-        },
-        mutation: {
-          document: mutationDoc,
-          resultPath: ['createOrUpdateVehicle'] as const,
-        },
-      })
-    );
+    const { result } = renderForm(mkProps());
 
     expect(result.current.value).toBeUndefined();
     expect(result.current.loading).toBe(false);
@@ -184,58 +138,29 @@ describe('useEntityForm', () => {
       },
     });
 
-    const { result } = renderHook(() =>
-      useEntityForm({
-        fields,
-        endpoint: 'http://test',
-        netexId: 'VEH:99',
-        query: {
-          document: vehicleDoc,
-          variables: (id: string) => ({ filter: { netexIds: [id] } }),
-          resultPath: ['vehicles', 'content', 0] as const,
-        },
-        mutation: {
-          document: mutationDoc,
-          resultPath: ['createOrUpdateVehicle'] as const,
-        },
-      })
-    );
+    const { result } = renderForm(mkProps({ netexId: 'VEH:99' }));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.errors).toEqual({ __init: 'Failed to load' });
     expect(result.current.value).toBeUndefined();
   });
 
-  it('waits for async getHeaders before loading', async () => {
+  it('waits for async getHeaders, then merges dynamic over static headers', async () => {
     let resolveHeaders: (h: Record<string, string>) => void = () => {};
     const getHeaders = () =>
       new Promise<Record<string, string>>(resolve => {
         resolveHeaders = resolve;
       });
 
-    mockFns.request.mockResolvedValueOnce({
-      vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
-    });
+    mockFns.request.mockResolvedValueOnce(envelope(TRAM));
 
-    const { result } = renderHook(
-      (props: UseEntityFormProps) => useEntityForm(props),
-      {
-        initialProps: {
-          fields,
-          endpoint: 'http://test',
-          netexId: 'VEH:1',
-          getHeaders,
-          query: {
-            document: vehicleDoc,
-            variables: (id: string) => ({ filter: { netexIds: [id] } }),
-            resultPath: ['vehicles', 'content', 0] as const,
-          },
-          mutation: {
-            document: mutationDoc,
-            resultPath: ['createOrUpdateVehicle'] as const,
-          },
-        },
-      }
+    const { result } = renderForm(
+      mkProps({
+        netexId: 'VEH:1',
+        // `Authorization` here must lose to the dynamic value below.
+        headers: { 'Client-Name': 'hathor', Authorization: 'static-fallback' },
+        getHeaders,
+      })
     );
 
     // Should not issue the request while dynamic headers are still pending —
@@ -245,51 +170,36 @@ describe('useEntityForm', () => {
 
     act(() => resolveHeaders({ Authorization: 'Bearer token' }));
 
-    // After headers resolve, the request runs with merged static + dynamic headers.
     await waitFor(() => expect(mockFns.request).toHaveBeenCalled());
 
-    expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram' } });
-    expect(mockFns.setHeaders).toHaveBeenLastCalledWith({ Authorization: 'Bearer token' });
+    expect(result.current.value).toEqual(TRAM);
+    expect(mockFns.setHeaders).toHaveBeenLastCalledWith({
+      'Client-Name': 'hathor',
+      Authorization: 'Bearer token',
+    });
     expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, { filter: { netexIds: ['VEH:1'] } });
   });
 
   it('ignores headers/getHeaders identity churn (no reload, edits preserved)', async () => {
-    mockFns.request.mockResolvedValue({
-      vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
-    });
+    mockFns.request.mockResolvedValue(envelope(TRAM));
 
     // Fresh inline literals every render — exactly what the README recommends.
-    const mkProps = (): UseEntityFormProps => ({
-      fields,
-      endpoint: 'http://test',
-      netexId: 'VEH:1',
-      headers: { 'Client-Name': 'hathor' },
-      getHeaders: () => ({ Authorization: 'Bearer token' }),
-      query: {
-        document: vehicleDoc,
-        variables: (id: string) => ({ filter: { netexIds: [id] } }),
-        resultPath: ['vehicles', 'content', 0] as const,
-      },
-      mutation: {
-        document: mutationDoc,
-        resultPath: ['createOrUpdateVehicle'] as const,
-      },
-    });
+    const churnProps = () =>
+      mkProps({
+        netexId: 'VEH:1',
+        headers: { 'Client-Name': 'hathor' },
+        getHeaders: () => ({ Authorization: 'Bearer token' }),
+      });
 
-    const { result, rerender } = renderHook(
-      (props: UseEntityFormProps) => useEntityForm(props),
-      { initialProps: mkProps() }
-    );
+    const { result, rerender } = renderForm(churnProps());
 
-    await waitFor(() =>
-      expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram' } })
-    );
+    await waitFor(() => expect(result.current.value).toEqual(TRAM));
     expect(mockFns.request).toHaveBeenCalledTimes(1);
 
     act(() => result.current.setValue({ netexId: 'VEH:1', name: { value: 'Edited' } } as any));
 
-    rerender(mkProps());
-    rerender(mkProps());
+    rerender(churnProps());
+    rerender(churnProps());
     await new Promise(r => setTimeout(r, 50));
 
     expect(mockFns.request).toHaveBeenCalledTimes(1);
@@ -305,57 +215,24 @@ describe('useEntityForm', () => {
           resolveA = resolve;
         })
       )
-      .mockResolvedValueOnce({
-        vehicles: { content: [{ netexId: 'VEH:2', name: { value: 'Bus' } }] },
-      });
+      .mockResolvedValueOnce(envelope(BUS));
 
-    const { result, rerender } = renderHook(
-      (props: UseEntityFormProps) => useEntityForm(props),
-      {
-        initialProps: {
-          fields,
-          endpoint: 'http://test',
-          netexId: 'VEH:1',
-          query: {
-            document: vehicleDoc,
-            variables: (id: string) => ({ filter: { netexIds: [id] } }),
-            resultPath: ['vehicles', 'content', 0] as const,
-          },
-          mutation: {
-            document: mutationDoc,
-            resultPath: ['createOrUpdateVehicle'] as const,
-          },
-        },
-      }
-    );
+    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
 
     await waitFor(() => expect(result.current.loading).toBe(true));
 
-    rerender({
-      fields,
-      endpoint: 'http://test',
-      netexId: 'VEH:2',
-      query: {
-        document: vehicleDoc,
-        variables: (id: string) => ({ filter: { netexIds: [id] } }),
-        resultPath: ['vehicles', 'content', 0] as const,
-      },
-      mutation: {
-        document: mutationDoc,
-        resultPath: ['createOrUpdateVehicle'] as const,
-      },
-    });
+    rerender(mkProps({ netexId: 'VEH:2' }));
 
     // Resolve the newer request first.
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.value).toEqual({ netexId: 'VEH:2', name: { value: 'Bus' } });
+    expect(result.current.value).toEqual(BUS);
 
     // Now resolve the stale request for VEH:1.
-    act(() => resolveA({ vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] } }));
+    act(() => resolveA(envelope(TRAM)));
 
     // The stale response must not overwrite the current value.
     await new Promise(r => setTimeout(r, 50));
-    expect(result.current.value).toEqual({ netexId: 'VEH:2', name: { value: 'Bus' } });
+    expect(result.current.value).toEqual(BUS);
     expect(result.current.errors).toEqual({});
   });
 
@@ -363,37 +240,15 @@ describe('useEntityForm', () => {
     let resolveMutation: (data: unknown) => void = () => {};
 
     mockFns.request
-      .mockResolvedValueOnce({
-        vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
-      })
+      .mockResolvedValueOnce(envelope(TRAM))
       .mockImplementationOnce(
         () => new Promise(resolve => {
           resolveMutation = resolve;
         })
       )
-      .mockResolvedValue({
-        vehicles: { content: [{ netexId: 'VEH:2', name: { value: 'Bus' } }] },
-      });
+      .mockResolvedValue(envelope(BUS));
 
-    const mkProps = (netexId: string): UseEntityFormProps => ({
-      fields,
-      endpoint: 'http://test',
-      netexId,
-      query: {
-        document: vehicleDoc,
-        variables: (id: string) => ({ filter: { netexIds: [id] } }),
-        resultPath: ['vehicles', 'content', 0] as const,
-      },
-      mutation: {
-        document: mutationDoc,
-        resultPath: ['createOrUpdateVehicle'] as const,
-      },
-    });
-
-    const { result, rerender } = renderHook(
-      (props: UseEntityFormProps) => useEntityForm(props),
-      { initialProps: mkProps('VEH:1') }
-    );
+    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -402,7 +257,7 @@ describe('useEntityForm', () => {
     await waitFor(() => expect(result.current.saving).toBe(true));
 
     // A netexId change starts a load, bumping requestId out from under the save.
-    rerender(mkProps('VEH:2'));
+    rerender(mkProps({ netexId: 'VEH:2' }));
     act(() => resolveMutation({ createOrUpdateVehicle: 'VEH:1' }));
 
     // The save abandons its refetch, but must still release the saving flag.
@@ -411,31 +266,13 @@ describe('useEntityForm', () => {
 
   it('surfaces a fallback error when a save fails with no GraphQL errors', async () => {
     mockFns.request
-      .mockResolvedValueOnce({
-        vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
-      })
+      .mockResolvedValueOnce(envelope(TRAM))
       // Transport failure: a bare Error, no `response.errors` to normalize.
       .mockRejectedValueOnce(new Error('Failed to fetch'));
 
     const onError = vi.fn();
 
-    const { result } = renderHook(() =>
-      useEntityForm({
-        fields,
-        endpoint: 'http://test',
-        netexId: 'VEH:1',
-        query: {
-          document: vehicleDoc,
-          variables: (id: string) => ({ filter: { netexIds: [id] } }),
-          resultPath: ['vehicles', 'content', 0] as const,
-        },
-        mutation: {
-          document: mutationDoc,
-          resultPath: ['createOrUpdateVehicle'] as const,
-        },
-        onError,
-      })
-    );
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onError }));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -446,54 +283,33 @@ describe('useEntityForm', () => {
   });
 
   it('saves, returns the id, and refetches', async () => {
+    const updated = { netexId: 'VEH:1', name: { value: 'Tram Updated' } };
+
     mockFns.request
-      .mockResolvedValueOnce({
-        vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
-      })
+      .mockResolvedValueOnce(envelope(TRAM))
       .mockResolvedValueOnce({ createOrUpdateVehicle: 'VEH:1' })
-      .mockResolvedValueOnce({
-        vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram Updated' } }] },
-      });
+      .mockResolvedValueOnce(envelope(updated));
 
     const onSaved = vi.fn();
     const onError = vi.fn();
 
-    const { result } = renderHook(() =>
-      useEntityForm({
-        fields,
-        endpoint: 'http://test',
-        netexId: 'VEH:1',
-        query: {
-          document: vehicleDoc,
-          variables: (id: string) => ({ filter: { netexIds: [id] } }),
-          resultPath: ['vehicles', 'content', 0] as const,
-        },
-        mutation: {
-          document: mutationDoc,
-          resultPath: ['createOrUpdateVehicle'] as const,
-        },
-        onSaved,
-        onError,
-      })
-    );
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onSaved, onError }));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     // Simulate an edit
-    result.current.setValue({ netexId: 'VEH:1', name: { value: 'Tram Updated' } });
+    result.current.setValue(updated);
     await waitFor(() => expect((result.current.value as any)?.name?.value).toBe('Tram Updated'));
 
     await act(async () => result.current.handleSave());
 
     await waitFor(() => expect(result.current.saving).toBe(false));
 
-    expect(mockFns.request).toHaveBeenNthCalledWith(2, mutationDoc, {
-      input: { netexId: 'VEH:1', name: { value: 'Tram Updated' } },
-    });
+    expect(mockFns.request).toHaveBeenNthCalledWith(2, mutationDoc, { input: updated });
     expect(mockFns.request).toHaveBeenNthCalledWith(3, vehicleDoc, {
       filter: { netexIds: ['VEH:1'] },
     });
-    expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram Updated' } });
+    expect(result.current.value).toEqual(updated);
     expect(onSaved).toHaveBeenCalledWith('VEH:1');
     expect(onError).not.toHaveBeenCalled();
   });
