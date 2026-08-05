@@ -110,6 +110,49 @@ describe('useEntityForm', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it('invalidates an in-flight load when switching to create mode', async () => {
+    let resolveLoad: (data: unknown) => void = () => {};
+    mockFns.request.mockImplementationOnce(
+      () => new Promise(resolve => {
+        resolveLoad = resolve;
+      })
+    );
+
+    const mkProps = (netexId?: string): UseEntityFormProps => ({
+      fields,
+      endpoint: 'http://test',
+      netexId,
+      query: {
+        document: vehicleDoc,
+        variables: (id: string) => ({ filter: { netexIds: [id] } }),
+        resultPath: ['vehicles', 'content', 0] as const,
+      },
+      mutation: {
+        document: mutationDoc,
+        resultPath: ['createOrUpdateVehicle'] as const,
+      },
+    });
+
+    const { result, rerender } = renderHook(
+      (props: UseEntityFormProps) => useEntityForm(props),
+      { initialProps: mkProps('VEH:1') }
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(true));
+
+    // Host drops netexId (edit -> create) while the load is still in flight.
+    rerender(mkProps(undefined));
+    expect(result.current.loading).toBe(false);
+
+    // The late response belongs to the abandoned edit form — it must not
+    // repopulate the create form.
+    act(() => resolveLoad({ vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] } }));
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(result.current.value).toBeUndefined();
+    expect(result.current.loading).toBe(false);
+  });
+
   it('does not load when netexId is omitted', () => {
     const { result } = renderHook(() =>
       useEntityForm({

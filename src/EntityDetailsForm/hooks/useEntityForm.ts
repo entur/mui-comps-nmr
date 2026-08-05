@@ -78,8 +78,15 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
 
   // Load entity by netexId.
   useEffect(() => {
-    // Create mode (netexId omitted): keep any locally edited value.
-    if (!netexId) return;
+    // Create mode (netexId omitted): keep any locally edited value, but retire
+    // any load still in flight for the previous netexId — otherwise its late
+    // response passes the staleness check below and repopulates the create form
+    // (and `loading` never clears if it never resolves).
+    if (!netexId) {
+      requestIdRef.current++;
+      if (mounted.current) setLoading(false);
+      return;
+    }
 
     const requestId = ++requestIdRef.current;
     const query = queryRef.current;
