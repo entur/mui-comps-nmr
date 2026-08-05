@@ -157,7 +157,11 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
         if (general.length) onError?.(general);
       }
     } finally {
-      if (mounted.current && requestId === requestIdRef.current) setSaving(false);
+      // This save owns the flag, so release it whenever still mounted — gating on
+      // requestId leaves it stuck true if a load bumped the id mid-save.
+      // (With genuinely concurrent saves the older one clears first; acceptable
+      // for a single boolean, revisit if concurrent saves become real.)
+      if (mounted.current) setSaving(false);
     }
   }, [value, client, resolveHeaders, onSaved, onError]);
 

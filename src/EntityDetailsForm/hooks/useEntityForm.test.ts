@@ -359,6 +359,56 @@ describe('useEntityForm', () => {
     expect(result.current.errors).toEqual({});
   });
 
+  it('clears saving when a concurrent load bumps requestId mid-save', async () => {
+    let resolveMutation: (data: unknown) => void = () => {};
+
+    mockFns.request
+      .mockResolvedValueOnce({
+        vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
+      })
+      .mockImplementationOnce(
+        () => new Promise(resolve => {
+          resolveMutation = resolve;
+        })
+      )
+      .mockResolvedValue({
+        vehicles: { content: [{ netexId: 'VEH:2', name: { value: 'Bus' } }] },
+      });
+
+    const mkProps = (netexId: string): UseEntityFormProps => ({
+      fields,
+      endpoint: 'http://test',
+      netexId,
+      query: {
+        document: vehicleDoc,
+        variables: (id: string) => ({ filter: { netexIds: [id] } }),
+        resultPath: ['vehicles', 'content', 0] as const,
+      },
+      mutation: {
+        document: mutationDoc,
+        resultPath: ['createOrUpdateVehicle'] as const,
+      },
+    });
+
+    const { result, rerender } = renderHook(
+      (props: UseEntityFormProps) => useEntityForm(props),
+      { initialProps: mkProps('VEH:1') }
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.setValue({ netexId: 'VEH:1', name: { value: 'Edited' } } as any));
+    act(() => { void result.current.handleSave(); });
+    await waitFor(() => expect(result.current.saving).toBe(true));
+
+    // A netexId change starts a load, bumping requestId out from under the save.
+    rerender(mkProps('VEH:2'));
+    act(() => resolveMutation({ createOrUpdateVehicle: 'VEH:1' }));
+
+    // The save abandons its refetch, but must still release the saving flag.
+    await waitFor(() => expect(result.current.saving).toBe(false));
+  });
+
   it('surfaces a fallback error when a save fails with no GraphQL errors', async () => {
     mockFns.request
       .mockResolvedValueOnce({
