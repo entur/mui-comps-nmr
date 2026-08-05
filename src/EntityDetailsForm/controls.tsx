@@ -44,6 +44,8 @@ export interface ControlProps {
   /** Form-level per-kind MUI overrides. The slice for this field's `spec.kind`
    *  is applied to its control (see `ControlSlotProps`). */
   slotProps?: ControlSlotProps;
+  /** Server validation error for this field (if any). */
+  error?: string;
 }
 
 /**
@@ -65,6 +67,7 @@ export function renderControl({
   onChange,
   options,
   slotProps,
+  error,
 }: ControlProps): ReactNode {
   // Shared TextField props. `slotProps` is set per-kind below (each TextField
   // kind merges its own override over `SHRINK_LABEL`); the bare default keeps
@@ -75,6 +78,8 @@ export function renderControl({
     size: 'small' as const,
     fullWidth: true,
     slotProps: SHRINK_LABEL as TextFieldProps['slotProps'],
+    error: !!error,
+    helperText: error ?? '',
   };
 
   switch (spec.kind) {
@@ -183,14 +188,19 @@ export function renderControl({
           value={((value as string[] | null | undefined) ?? []).filter(Boolean)}
           onChange={(_e, v) => onChange(v.length ? v : undefined)}
           slotProps={slotProps?.enumMulti}
-          renderInput={params => <TextField {...params} label={label} slotProps={SHRINK_LABEL} />}
+          renderInput={params => (
+            <TextField
+              {...params}
+              label={label}
+              slotProps={SHRINK_LABEL}
+              error={!!error}
+              helperText={error ?? ''}
+            />
+          )}
         />
       );
 
     case 'reference': {
-      // Single relation edited by its identity leaf (`path` ends at the id).
-      // With a `options` dataset → Autocomplete; without → free-text id field
-      // (zero-config forms carry no layout entry, so they always degrade).
       const opts = options?.();
       if (!opts)
         return (
@@ -210,7 +220,15 @@ export function renderControl({
           isOptionEqualToValue={(o, v) => o.value === v.value}
           value={selected}
           onChange={(_e, o) => onChange(o ? o.value : undefined)}
-          renderInput={params => <TextField {...params} label={label} slotProps={SHRINK_LABEL} />}
+          renderInput={params => (
+            <TextField
+              {...params}
+              label={label}
+              slotProps={SHRINK_LABEL}
+              error={!!error}
+              helperText={error ?? ''}
+            />
+          )}
         />
       );
     }

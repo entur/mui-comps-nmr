@@ -183,6 +183,7 @@ const genVehicleTypes = (n: number, seed: number): VehicleType[] => {
         standingCapacity: standing,
         fareClass: pick(FARE),
       },
+      dataOwnerRef: '',
       created: day(1500),
       changed: day(2800),
     };

@@ -7,9 +7,19 @@ Status: seed, unpublished. Storybook deploys to GitHub Pages.
 
 ## Core
 
-Factory-only. No premade named components. Call
-`createEntityDetailsForm<E>(fields)` → typed React form. No data fetch, no save,
-no i18n runtime, no router. Public API in `src/index.ts`.
+Two layers. **Presentational**: `createAbstractEntityDetailsForm<E>(fields)` →
+typed React form. No data fetch, no save, no i18n runtime, no router.
+**Data-aware**: generated wrappers `VehicleForm` / `VehicleTypeForm` (from
+`scripts/generateWrappers.ts`) wrap it and do load/save over sobek GraphQL via
+the internal `useEntityForm` hook. Public API in `src/index.ts`.
+
+`useEntityForm` contract (not exported; `src/EntityDetailsForm/hooks/`):
+headers resolved **per request** (`headers` + `getHeaders` ref-guarded, dynamic
+wins over static) so inline literals never re-trigger a load. `netexId`
+set → `undefined` keeps `value` and retires the in-flight load; it does not
+blank the form. Save failures with no GraphQL `errors` array fall back to
+`onError(['Failed to save'])`. Stale responses guarded by a `requestIdRef`
+counter; `saving` is released on unmount-check alone, never gated on that id.
 
 - `mode` `'view' | 'edit'` — view disables inputs.
 - `layout?` — whitelist of sections (`{ Section: [fields] }`). Omitted field not
@@ -64,11 +74,15 @@ per-entity modules.
 
 ### Patch overlay
 
-`schema/sobek.patch.graphqls` — committed SDL overlay adding write-only fields
-(`dataOwnerRef`) onto read types before codegen. Satisfies distill's
-"Input ⊆ Entity" check. Types deliberately ahead of live read schema — safe, lib
-runs no GraphQL ops. When sobek adds these to read types, delete matching
-`extend` lines by hand.
+`schema/sobek.patch.graphqls` — committed SDL overlay applied before codegen,
+for fields the live schema hasn't shipped. Currently `manufacturer`, `range`,
+`fullCharge`, `carLoading` on VehicleType. Extends **both** `type VehicleType`
+and `input VehicleTypeInput`: the read half satisfies distill's "Input ⊆ Entity"
+check, the input half keeps the field out of `serverManaged` (derived = on
+`Entity`, not on `Input`) — read-only extend ⇒ permanently locked control. Types
+deliberately ahead of live read schema — safe, lib runs no GraphQL ops. When
+sobek ships a field for real, delete matching `extend` lines by hand (done for
+`dataOwnerRef`, now a real read field).
 
 ## Build
 

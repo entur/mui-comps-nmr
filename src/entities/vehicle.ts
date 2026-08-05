@@ -9,7 +9,7 @@ export interface Entity {
   changedBy?: Maybe<Scalars['String']['output']>;
   chassisNumber?: Maybe<Scalars['String']['output']>;
   created?: Maybe<Scalars['DateTime']['output']>;
-  dataOwnerRef?: Maybe<Scalars['String']['output']>;
+  dataOwnerRef: Scalars['String']['output'];
   description?: Maybe<MultilingualString>;
   name?: Maybe<MultilingualString>;
   netexId: Scalars['String']['output'];

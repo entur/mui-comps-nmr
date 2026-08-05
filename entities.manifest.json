@@ -1,1 +1,19 @@
-["VehicleType", "Vehicle"]
+[
+  {
+    "entity": "VehicleType",
+    "queryRoot": "vehicleTypes",
+    "mutationName": "createOrUpdateVehicleType",
+    "ignore": [
+      "vehicleTypes.content.vehicles",
+      "vehicleTypes.content.keyValues"
+    ],
+    "relationFields": ["deckPlan"]
+  },
+  {
+    "entity": "Vehicle",
+    "queryRoot": "vehicles",
+    "mutationName": "createOrUpdateVehicle",
+    "ignore": [],
+    "relationFields": ["transportType"]
+  }
+]

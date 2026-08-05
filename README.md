@@ -6,45 +6,57 @@ A small React MUI component library for Entur's
 [sobek](https://github.com/entur/sobek) GraphQL schema. Documented and previewed
 with [Storybook](https://storybook.js.org).
 
-> Status: seed. The library ships a generic `createEntityDetailsForm` factory;
-> per-entity bindings (`vehicleTypeFields`, `vehicleFields`) are generated from
+> Status: seed. The library ships generated data-aware form components
+> (`VehicleForm`, `VehicleTypeForm`) typed from the live sobek GraphQL schema.
+> Per-entity bindings (`vehicleTypeFields`, `vehicleFields`) are generated from
 > the live schema. Not published to a package registry yet; the Storybook is
 > deployed to GitHub Pages.
 
 ## Components
 
-### `createEntityDetailsForm<E>(fields)`
+### `VehicleForm` / `VehicleTypeForm`
 
-The library is **factory-only** — it ships no premade, hand-named form
-components. You call `createEntityDetailsForm` with a field registry and get
-back a typed React component. Name it whatever fits your UI. No data fetching,
-no save logic, no i18n runtime, no router — drop it into any MUI app.
+These generated components load an entity from sobek, render a schema-driven
+form, and save edits back. They are the public form API.
 
 ```tsx
-import { createEntityDetailsForm, vehicleTypeFields, type VehicleType, type VehicleTypeLayout } from '@entur/mui-comps-nmr';
+import { VehicleForm, type VehicleLayout } from '@entur/mui-comps-nmr';
 
-const VehicleTypeForm = createEntityDetailsForm<VehicleType>(vehicleTypeFields);
-
-const layout: VehicleTypeLayout = {
-  Edit: ['name', 'shortName', 'length'],
-  Capacity: ['totalCapacity', 'seatingCapacity', 'fareClass'],
+const layout: VehicleLayout = {
+  Edit: ['name', 'registrationNumber', 'operationalNumber'],
+  Dates: ['buildDate', 'registrationDate'],
 };
-// <VehicleTypeForm value={v} onChange={setV} mode="edit" layout={layout} variant="tabs" />
+
+<VehicleForm
+  endpoint="https://api.entur.io/sobek/graphql"
+  headers={{ 'Client-Name': 'hathor' }}
+  getHeaders={() => ({ Authorization: `Bearer ${token}` })}
+  netexId="VEH:Vehicle:701"
+  mode="edit"
+  layout={layout}
+  onSaved={(id) => router.push(`/vehicles/${id}`)}
+  onError={(msgs) => toast.error(msgs.join(', '))}
+/>
 ```
 
 | Prop | Type | Notes |
 | --- | --- | --- |
-| `value` | `E` | Current entity value (the generated read type — see below). |
-| `onChange` | `(next: E) => void` | Fired with the merged value on every edit. |
-| `mode` | `'view' \| 'edit'` | `'view'` disables all inputs. |
-| `layout?` | `Layout<EntityField>` | Whitelist of sections (see below). Omitted → flat, all fields rendered. |
-| `variant?` | `'tabs' \| 'stacked'` | How ≥2 sections are presented. Default: `'tabs'`. |
+| `endpoint` | `string` | sobek GraphQL endpoint URL. |
+| `headers?` | `Record<string, string>` | Static headers sent with every request. |
+| `getHeaders?` | `() => Record<string, string> \| Promise<...>` | Dynamic headers (e.g. OIDC tokens). Called once per request, so a refreshed token is always picked up. Safe to pass as an inline literal — identity churn never re-triggers a load. |
+| `netexId?` | `string` | Entity to load. Omit for create mode. Changing it from set → `undefined` **keeps** the current value (in-progress edits survive) and discards any in-flight load — it does not blank the form. |
+| `mode?` | `'view' \| 'edit'` | Default `'edit'`. |
+| `layout?` | `Layout<EntityField>` | Whitelist of sections (see below). Omitted → flat, all fields. |
+| `variant?` | `'tabs' \| 'stacked'` | ≥2 sections. Default `'tabs'`. |
+| `slotProps?` | `ControlSlotProps` | Per-kind MUI overrides (TextField, Switch, DataGrid, Tabs). |
+| `onSaved?` | `(netexId: string) => void` | Called after successful save + refetch. |
+| `onError?` | `(generalErrors: string[]) => void` | Called with non-field GraphQL / network errors. |
 
 #### Layout contract
 
 `layout` is a **whitelist of sections**: each key becomes a section label; its
 array is the ordered list of fields to render in that section. A layout item is
-either a bare field key or `{ field, label }` to override the default label:
+either a bare field key or an object with extra per-field config:
 
 ```ts
 const layout: VehicleTypeLayout = {
@@ -56,26 +68,50 @@ const layout: VehicleTypeLayout = {
 Key points:
 
 - **Loss-free omission** — a field omitted from `layout` is not rendered, but
-  its value passes through `onChange` untouched. Omitting a field never drops
-  data.
+  its value survives a save. Omitting a field never drops data.
 - **Omit `layout` entirely** — renders all fields in a flat single panel.
 - **Single section renders flat** — no tab bar or panel header; the section key
   is ignored visually.
 - **`variant`** — when there are ≥2 sections, `'tabs'` (default) shows a tab
   bar with one panel visible at a time; `'stacked'` renders all panels top-to-bottom.
 - **`serverManaged` fields** — fields flagged `serverManaged` (backend-owned:
-  `version`, `created`, `changed`, `changedBy`) are **hidden from the editable
-  model**: they render locked even in `edit` mode and are surfaced purely so the
-  user can *see* the entity's extra meta/semantic context. They are **not
-  round-tripped** — the backend owns them, so they are never merged into the
-  write payload and never travel back as edits. This is the key difference from
-  an ordinary omitted field, whose value *does* pass through `onChange`
-  untouched. Their displayed values go stale after a successful save; the client
-  refetches to refresh them.
-- **Labels** — every label defaults to a humanized version of the field key
-  (`seatingCapacity` → "Seating Capacity"). Override per-field via `{ field, label }`
-  in the layout entry. There is **no i18n dependency** — localization is entirely
-  the client's responsibility via the `label` override.
+  `version`, `created`, `changed`, `changedBy`) render locked even in `edit`
+  mode. They are **not round-tripped** — the backend owns them. Their displayed
+  values go stale after a successful save; the component refetches to refresh them.
+- **`reference` fields** (e.g. `Vehicle.transportType`, `VehicleType.deckPlan`)
+  edit a single relation by its identity leaf. Pass `options` to render an
+  Autocomplete rather than a plain id field:
+
+  ```ts
+  const layout: VehicleLayout = {
+    Edit: [{
+      field: 'transportType',
+      label: 'Vehicle type',
+      options: () => [
+        { value: 'VEH:VehicleType:1', label: 'Class 70 EMU' },
+        { value: 'VEH:VehicleType:2', label: 'Class 80 DMU' },
+      ],
+    }],
+  };
+  ```
+
+  `value` in each option is the referenced entity's `netexId`; `label` is
+  display-only.
+- **Grid fields** — array-of-identity relations (e.g. `VehicleType.vehicles`)
+  render as a read-only `ObjectGrid`. Use `entries` to fix columns:
+
+  ```ts
+  const layout: VehicleTypeLayout = {
+    Vehicles: [{ field: 'vehicles', entries: [
+      { field: 'netexId', label: 'NeTEx ID' },
+      { field: 'name', label: 'Name' },
+    ] }],
+  };
+  ```
+
+- **Labels** default to a humanized field key (`seatingCapacity` → "Seating Capacity").
+  Override via `label`. There is **no i18n dependency** — localization is the
+  client's responsibility.
 
 ## The GraphQL → TypeScript pipeline
 
@@ -106,7 +142,7 @@ then distils that into per-entity modules.
   into individually-addressable entries with their access path (`path:
   ['passengerCapacity', 'seatingCapacity']`). Each entry carries:
   - `kind` — the control family (`text`, `number`, `name`, `switch`, `enum`,
-    `enumMulti`, `grid`).
+    `enumMulti`, `grid`, `reference`, `date`, `datetime`).
   - `path` — access path into the entity value.
   - `options` — enum member list (for `enum`/`enumMulti`).
   - `serverManaged` — **derived, not hand-set**: a field present on the read
@@ -156,20 +192,36 @@ export { FIELDS as vehicleFields } from './vehicle';
 
 ### Ahead-of-backend patch overlay
 
-`schema/sobek.patch.graphqls` is a committed SDL overlay that adds write-only
-fields onto the read types before codegen runs:
+`schema/sobek.patch.graphqls` is a committed SDL overlay applied before codegen
+runs, carrying fields the domain needs but the live sobek schema has not shipped
+yet:
 
 ```graphql
-extend type VehicleType { dataOwnerRef: String }
-extend type Vehicle { dataOwnerRef: String }
+extend type VehicleType {
+  manufacturer: String
+  range: Float
+  fullCharge: Float
+  carLoading: Boolean
+}
+extend input VehicleTypeInput {
+  manufacturer: String
+  range: Float
+  fullCharge: Float
+  carLoading: Boolean
+}
 ```
 
-This satisfies the distill script's "Input ⊆ Entity" check (every field in
-`VehicleTypeInput` must exist on `VehicleType`) so that `dataOwnerRef` is
-included in `FIELDS`. The generated types are therefore deliberately **ahead of
-the live read schema**. This is safe because the library executes no GraphQL
-operations — it only generates types and renders a form. When sobek adds these
-fields to its read types, delete the matching `extend` lines by hand.
+Extending **both** halves is deliberate. The read `type` satisfies the distill
+script's "Input ⊆ Entity" check (every field in `VehicleTypeInput` must exist on
+`VehicleType`). The `input` keeps the field *out* of the `serverManaged` set,
+because distill derives that flag from "present on `Entity`, absent from
+`Input`" — extend only the read type and the field renders permanently locked.
+
+The generated types are therefore deliberately **ahead of the live read
+schema**. This is safe because the library executes no GraphQL operations — it
+only generates types and renders a form. When sobek ships a field for real,
+delete the matching `extend` lines by hand (as was done for `dataOwnerRef`,
+which is now a genuine read-schema field).
 
 ## Building the library
 

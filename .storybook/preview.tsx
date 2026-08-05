@@ -1,5 +1,5 @@
-import type { Preview } from '@storybook/react-vite';
-import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import type { Preview } from "@storybook/react-vite";
+import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 
 /**
  * Storybook-only MUI theme. Consumers supply their own theme in production —
@@ -9,10 +9,10 @@ import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
  */
 const theme = createTheme({
   palette: {
-    mode: 'light',
-    primary: { main: '#11616f' },
-    secondary: { main: '#e8663d' },
-    background: { default: '#f4f1ea', paper: '#ffffff' },
+    mode: "light",
+    primary: { main: "#11616f" },
+    secondary: { main: "#e8663d" },
+    background: { default: "#f4f1ea", paper: "#ffffff" },
   },
   shape: { borderRadius: 8 },
   typography: {
@@ -23,14 +23,24 @@ const theme = createTheme({
 const preview: Preview = {
   parameters: {
     controls: { matchers: { color: /(background|color)$/i, date: /Date$/i } },
-    backgrounds: { default: 'paper' },
-    // Sidebar order: compositions on top, then DataGrid, then Forms, then anything else A–Z.
+    backgrounds: { default: "paper" },
+    // Sidebar order: compositions on top (GqlHostPages first within it — Storybook
+    // opens the first story, so this makes GqlHostPages the landing page), then
+    // DataGrid, then Forms, then anything else A–Z.
     options: {
-      storySort: { order: ['compositions', 'DataGrid', 'Forms', '*'] },
+      storySort: {
+        order: [
+          "compositions",
+          ["GqlHostPages", "*"],
+          "DataGrid",
+          "Forms",
+          "*",
+        ],
+      },
     },
   },
   decorators: [
-    Story => (
+    (Story) => (
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <Story />

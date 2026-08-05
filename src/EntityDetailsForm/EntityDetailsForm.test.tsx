@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { createEntityDetailsForm } from './index';
+import { createAbstractEntityDetailsForm } from './abstractForm';
 import type { FieldSpec, EntityDetailsFormProps } from './types';
 
 interface V {
@@ -16,14 +16,14 @@ const fields: Record<string, FieldSpec> = {
   version: { kind: 'number', path: ['version'], serverManaged: true },
 };
 
-const Form = createEntityDetailsForm<V>(fields);
+const Form = createAbstractEntityDetailsForm<V>(fields);
 
 const Host = (props: Partial<EntityDetailsFormProps<V>>) => {
   const [v, setV] = useState<V>({ name: { value: 'Tram' }, length: 5, version: 1 });
   return <Form value={v} onChange={setV} mode="edit" {...props} />;
 };
 
-describe('createEntityDetailsForm', () => {
+describe('createAbstractEntityDetailsForm', () => {
   it('renders all fields flat when no layout is given', () => {
     render(<Host />);
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Tram');
@@ -86,7 +86,7 @@ describe('createEntityDetailsForm', () => {
   });
 
   it('spreads per-kind switch slotProps onto the Switch', () => {
-    const SwForm = createEntityDetailsForm<{ active?: boolean }>({
+    const SwForm = createAbstractEntityDetailsForm<{ active?: boolean }>({
       active: { kind: 'switch', path: ['active'] },
     });
     const { container } = render(
@@ -101,7 +101,7 @@ describe('createEntityDetailsForm', () => {
   });
 
   it('renders a date kind as a native date input', () => {
-    const DForm = createEntityDetailsForm<{ built?: string | null }>({
+    const DForm = createAbstractEntityDetailsForm<{ built?: string | null }>({
       built: { kind: 'date', path: ['built'] },
     });
     render(<DForm value={{ built: '2020-01-15' }} onChange={() => {}} mode="edit" />);
@@ -116,7 +116,7 @@ describe('createEntityDetailsForm', () => {
   const refFields: Record<string, FieldSpec> = {
     transportType: { kind: 'reference', path: ['transportType', 'netexId'] },
   };
-  const RefForm = createEntityDetailsForm<R>(refFields);
+  const RefForm = createAbstractEntityDetailsForm<R>(refFields);
 
   it('reference with options renders an Autocomplete showing the matched label', () => {
     const layout = {
@@ -178,5 +178,21 @@ describe('createEntityDetailsForm', () => {
     fireEvent.mouseDown(input); // open the listbox
     fireEvent.click(screen.getByText('Beta'));
     expect(input.value).toBe('Beta');
+  });
+
+  it('surfaces errors and disables inputs when disabled is true', () => {
+    const { container } = render(
+      <Form
+        value={{ name: { value: 'Tram' }, length: 5 }}
+        onChange={() => {}}
+        mode="edit"
+        errors={{ name: 'Already exists' }}
+        disabled
+      />
+    );
+    const nameInput = screen.getByLabelText('Name') as HTMLInputElement;
+    expect(nameInput).toBeDisabled();
+    expect(container.querySelector('.Mui-error')).not.toBeNull();
+    expect(screen.getByText(/Already exists/)).toBeInTheDocument();
   });
 });
