@@ -195,8 +195,9 @@ describe('useEntityForm', () => {
       }
     );
 
-    // Should not issue the request while dynamic headers are still pending.
-    expect(result.current.loading).toBe(false);
+    // Should not issue the request while dynamic headers are still pending —
+    // but the load is already in flight, so the form reports `loading`.
+    expect(result.current.loading).toBe(true);
     expect(mockFns.request).not.toHaveBeenCalled();
 
     act(() => resolveHeaders({ Authorization: 'Bearer token' }));
@@ -207,6 +208,49 @@ describe('useEntityForm', () => {
     expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram' } });
     expect(mockFns.setHeaders).toHaveBeenLastCalledWith({ Authorization: 'Bearer token' });
     expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, { filter: { netexIds: ['VEH:1'] } });
+  });
+
+  it('ignores headers/getHeaders identity churn (no reload, edits preserved)', async () => {
+    mockFns.request.mockResolvedValue({
+      vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
+    });
+
+    // Fresh inline literals every render — exactly what the README recommends.
+    const mkProps = (): UseEntityFormProps => ({
+      fields,
+      endpoint: 'http://test',
+      netexId: 'VEH:1',
+      headers: { 'Client-Name': 'hathor' },
+      getHeaders: () => ({ Authorization: 'Bearer token' }),
+      query: {
+        document: vehicleDoc,
+        variables: (id: string) => ({ filter: { netexIds: [id] } }),
+        resultPath: ['vehicles', 'content', 0] as const,
+      },
+      mutation: {
+        document: mutationDoc,
+        resultPath: ['createOrUpdateVehicle'] as const,
+      },
+    });
+
+    const { result, rerender } = renderHook(
+      (props: UseEntityFormProps) => useEntityForm(props),
+      { initialProps: mkProps() }
+    );
+
+    await waitFor(() =>
+      expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Tram' } })
+    );
+    expect(mockFns.request).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.setValue({ netexId: 'VEH:1', name: { value: 'Edited' } } as any));
+
+    rerender(mkProps());
+    rerender(mkProps());
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(mockFns.request).toHaveBeenCalledTimes(1);
+    expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Edited' } });
   });
 
   it('ignores a stale response when netexId changes', async () => {

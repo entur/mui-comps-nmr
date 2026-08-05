@@ -43,7 +43,7 @@ const layout: VehicleLayout = {
 | --- | --- | --- |
 | `endpoint` | `string` | sobek GraphQL endpoint URL. |
 | `headers?` | `Record<string, string>` | Static headers sent with every request. |
-| `getHeaders?` | `() => Record<string, string> \| Promise<...>` | Dynamic headers (e.g. OIDC tokens). Resolved before the first request. |
+| `getHeaders?` | `() => Record<string, string> \| Promise<...>` | Dynamic headers (e.g. OIDC tokens). Called once per request, so a refreshed token is always picked up. Safe to pass as an inline literal — identity churn never re-triggers a load. |
 | `netexId?` | `string` | Entity to load. Omit for create mode. |
 | `mode?` | `'view' \| 'edit'` | Default `'edit'`. |
 | `layout?` | `Layout<EntityField>` | Whitelist of sections (see below). Omitted → flat, all fields. |

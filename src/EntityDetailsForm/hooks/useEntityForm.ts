@@ -39,11 +39,6 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Resolved headers: static headers merged with the latest result of getHeaders().
-  // Load/save effects wait for this to be non-null before issuing requests, so
-  // dynamic auth headers (e.g. Authorization) are never omitted on the first request.
-  const [authHeaders, setAuthHeaders] = useState<Record<string, string> | null>(null);
-
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
 
@@ -55,55 +50,46 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
   const fieldsRef = useRef(props.fields);
   const queryRef = useRef(props.query);
   const mutationRef = useRef(props.mutation);
+  const headersRef = useRef(headers);
+  const getHeadersRef = useRef(getHeaders);
   useEffect(() => { fieldsRef.current = props.fields; }, [props.fields]);
   useEffect(() => { queryRef.current = props.query; }, [props.query]);
   useEffect(() => { mutationRef.current = props.mutation; }, [props.mutation]);
+  useEffect(() => { headersRef.current = headers; }, [headers]);
+  useEffect(() => { getHeadersRef.current = getHeaders; }, [getHeaders]);
 
-  // Resolve headers (static + dynamic) whenever the inputs change.
-  useEffect(() => {
-    let cancelled = false;
-    const base = headers ? { ...headers } : {};
-
-    if (!getHeaders) {
-      setAuthHeaders(base);
-      return;
+  // Resolve headers (static + dynamic) per request rather than into state.
+  // Holding them in state made every inline `headers`/`getHeaders` literal mint a
+  // new identity -> new state object -> load effect re-run -> in-progress edits
+  // overwritten by the server entity. Resolving on demand also means getHeaders()
+  // is re-read on every request, so a refreshed token is picked up.
+  const resolveHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const base = headersRef.current ? { ...headersRef.current } : {};
+    const getDyn = getHeadersRef.current;
+    if (!getDyn) return base;
+    try {
+      return { ...base, ...(await getDyn()) };
+    } catch {
+      // Failure to load dynamic headers should not silently block the form.
+      // Fall back to static headers; downstream requests will fail visibly.
+      return base;
     }
+  }, []);
 
-    Promise.resolve(getHeaders())
-      .then(dyn => {
-        if (!cancelled) setAuthHeaders({ ...base, ...dyn });
-      })
-      .catch(() => {
-        // Failure to load dynamic headers should not silently block the form.
-        // Fall back to static headers; downstream requests will fail visibly.
-        if (!cancelled) setAuthHeaders(base);
-      });
-
-    return () => { cancelled = true; };
-  }, [headers, getHeaders]);
-
-  // Load entity by netexId once auth headers are resolved.
+  // Load entity by netexId.
   useEffect(() => {
-    // Create mode (netexId omitted): keep any locally edited value; don't clear it
-    // just because auth headers are still resolving.
+    // Create mode (netexId omitted): keep any locally edited value.
     if (!netexId) return;
-
-    if (!authHeaders) {
-      // Clear stale state while auth headers are still resolving for an edit form.
-      if (mounted.current) {
-        setValue(undefined);
-        setErrors({});
-      }
-      return;
-    }
 
     const requestId = ++requestIdRef.current;
     const query = queryRef.current;
-    client.setHeaders(authHeaders);
     setLoading(true);
 
-    client
-      .request(query.document, query.variables(netexId))
+    resolveHeaders()
+      .then(authHeaders => {
+        client.setHeaders(authHeaders);
+        return client.request(query.document, query.variables(netexId));
+      })
       .then((data: any) => {
         if (!mounted.current || requestId !== requestIdRef.current) return;
         const entity = query.resultPath.reduce((o: any, k: string | number) => o?.[k], data);
@@ -118,19 +104,19 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
         if (mounted.current && requestId === requestIdRef.current) setLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, netexId, authHeaders]);
+  }, [client, netexId, resolveHeaders]);
 
   // Save + refetch
   const handleSave = useCallback(async () => {
-    if (!value || !authHeaders) return;
+    if (!value) return;
     const requestId = ++requestIdRef.current;
     const query = queryRef.current;
     const mutation = mutationRef.current;
     const fields = fieldsRef.current;
 
-    client.setHeaders(authHeaders);
     setSaving(true);
     try {
+      client.setHeaders(await resolveHeaders());
       const input = toInputEntity(value, fields);
       const data: any = await client.request(mutation.document, { input });
       const returnedId: string = mutation.resultPath.reduce((o: any, k: string | number) => o?.[k], data);
@@ -156,7 +142,7 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
     } finally {
       if (mounted.current && requestId === requestIdRef.current) setSaving(false);
     }
-  }, [value, client, authHeaders, onSaved, onError]);
+  }, [value, client, resolveHeaders, onSaved, onError]);
 
   return { value, setValue, loading, saving, errors, handleSave };
 }
