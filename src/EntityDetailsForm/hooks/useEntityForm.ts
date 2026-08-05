@@ -31,6 +31,74 @@ export interface UseEntityFormProps extends EntityFormConfig {
   onError?: (generalErrors: string[]) => void;
 }
 
+// --- Reducer: explicit async state machine -----------------------------
+//
+// Staleness lives here: every async completion carries the epoch it started
+// with and the reducer no-ops when `action.epoch !== state.epoch`, replacing
+// the scattered `requestId !== requestIdRef.current` guards. `epoch` bumps on
+// every new load/save start and when a load is retired (create mode).
+
+type Status = 'idle' | 'loading' | 'saving';
+
+interface EntityFormState<E> {
+  value: E | undefined;
+  status: Status;
+  errors: Record<string, string>;
+  epoch: number;
+}
+
+type EntityFormAction<E> =
+  | { type: 'LOAD_START' }
+  | { type: 'LOAD_SUCCESS'; epoch: number; entity: E | undefined }
+  | { type: 'LOAD_FAILURE'; epoch: number }
+  | { type: 'LOAD_RETIRED' } // netexId removed: abandon in-flight load
+  | { type: 'SAVE_START' }
+  | { type: 'SAVE_SUCCESS'; epoch: number; entity: E | undefined }
+  | { type: 'SAVE_FAILURE'; epoch: number; fieldErrors: Record<string, string> }
+  | { type: 'SAVE_SETTLED' } // release `saving` — deliberately never epoch-gated
+  | { type: 'EDIT'; value: E | undefined };
+
+function entityFormReducer<E>(
+  state: EntityFormState<E>,
+  action: EntityFormAction<E>,
+): EntityFormState<E> {
+  switch (action.type) {
+    case 'LOAD_START':
+      return { ...state, status: 'loading', epoch: state.epoch + 1 };
+    case 'LOAD_SUCCESS':
+      if (action.epoch !== state.epoch) return state;
+      return { ...state, status: 'idle', value: action.entity, errors: {} };
+    case 'LOAD_FAILURE':
+      if (action.epoch !== state.epoch) return state;
+      return { ...state, status: 'idle', errors: { __init: LOAD_ERR } };
+    case 'LOAD_RETIRED':
+      // Keep any locally edited value (create mode), just stop waiting on the
+      // retired load. Bumping epoch makes its late response a no-op.
+      return { ...state, status: 'idle', epoch: state.epoch + 1 };
+    case 'SAVE_START':
+      return { ...state, status: 'saving', epoch: state.epoch + 1 };
+    case 'SAVE_SUCCESS':
+      if (action.epoch !== state.epoch) return state;
+      return { ...state, value: action.entity, errors: {} };
+    case 'SAVE_FAILURE':
+      if (action.epoch !== state.epoch) return state;
+      return { ...state, errors: action.fieldErrors };
+    case 'SAVE_SETTLED':
+      // Owns the flag: release it whenever still mounted — gating on epoch
+      // leaves it stuck 'saving' if a load bumped the epoch mid-save.
+      return state.status === 'saving' ? { ...state, status: 'idle' } : state;
+    case 'EDIT':
+      return { ...state, value: action.value };
+  }
+}
+
+const INITIAL_STATE: EntityFormState<any> = {
+  value: undefined,
+  status: 'idle',
+  errors: {},
+  epoch: 0,
+};
+
 // Internal hook — accepts generic E to type the returned entity shape.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function useEntityForm<E>(props: UseEntityFormProps) {
