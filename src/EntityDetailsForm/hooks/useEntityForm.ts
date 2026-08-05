@@ -5,6 +5,10 @@ import { toInputEntity } from '../toInput';
 import { normalizeEntityErrors } from '../normalizeErrors';
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 
+// Fallback messages for failures that carry no usable GraphQL error payload
+// (transport errors, malformed responses). Hosts localize by intercepting these.
+const LOAD_ERR = 'Failed to load', SAVE_ERR = 'Failed to save';
+
 export interface EntityFormConfig {
   fields: Record<string, FieldSpec>;
   query: {
@@ -105,7 +109,7 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
       })
       .catch(_e => {
         if (!mounted.current || requestId !== requestIdRef.current) return;
-        setErrors({ __init: 'Failed to load' });
+        setErrors({ __init: LOAD_ERR });
       })
       .finally(() => {
         if (mounted.current && requestId === requestIdRef.current) setLoading(false);
@@ -144,7 +148,13 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
       if (mounted.current && requestId === requestIdRef.current) {
         const { fieldErrors, generalErrors } = normalizeEntityErrors(e, fields);
         setErrors(fieldErrors);
-        if (generalErrors.length) onError?.(generalErrors);
+        // Transport/unknown errors carry no GraphQL error array — without a
+        // fallback the save would fail entirely silently.
+        const general =
+          generalErrors.length || Object.keys(fieldErrors).length
+            ? generalErrors
+            : [SAVE_ERR];
+        if (general.length) onError?.(general);
       }
     } finally {
       if (mounted.current && requestId === requestIdRef.current) setSaving(false);

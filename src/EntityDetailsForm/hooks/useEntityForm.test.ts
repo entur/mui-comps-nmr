@@ -359,6 +359,42 @@ describe('useEntityForm', () => {
     expect(result.current.errors).toEqual({});
   });
 
+  it('surfaces a fallback error when a save fails with no GraphQL errors', async () => {
+    mockFns.request
+      .mockResolvedValueOnce({
+        vehicles: { content: [{ netexId: 'VEH:1', name: { value: 'Tram' } }] },
+      })
+      // Transport failure: a bare Error, no `response.errors` to normalize.
+      .mockRejectedValueOnce(new Error('Failed to fetch'));
+
+    const onError = vi.fn();
+
+    const { result } = renderHook(() =>
+      useEntityForm({
+        fields,
+        endpoint: 'http://test',
+        netexId: 'VEH:1',
+        query: {
+          document: vehicleDoc,
+          variables: (id: string) => ({ filter: { netexIds: [id] } }),
+          resultPath: ['vehicles', 'content', 0] as const,
+        },
+        mutation: {
+          document: mutationDoc,
+          resultPath: ['createOrUpdateVehicle'] as const,
+        },
+        onError,
+      })
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => result.current.handleSave());
+    await waitFor(() => expect(result.current.saving).toBe(false));
+
+    expect(onError).toHaveBeenCalledWith(['Failed to save']);
+  });
+
   it('saves, returns the id, and refetches', async () => {
     mockFns.request
       .mockResolvedValueOnce({
