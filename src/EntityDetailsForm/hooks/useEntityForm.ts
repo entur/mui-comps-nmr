@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useReducer, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { GraphQLClient } from 'graphql-request';
 import type { FieldSpec } from '../types';
 import { toInputEntity } from '../toInput';
@@ -106,15 +106,26 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
 
   const client = useMemo(() => new GraphQLClient(endpoint), [endpoint]);
 
-  const [value, setValue] = useState<E | undefined>();
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [state, dispatch] = useReducer(
+    entityFormReducer<E>,
+    INITIAL_STATE as EntityFormState<E>,
+  );
+  const { value, errors } = state;
+  const loading = state.status === 'loading';
+  const saving = state.status === 'saving';
+
+  const setValue = useCallback(
+    (v: E | undefined) => dispatch({ type: 'EDIT', value: v }),
+    [],
+  );
 
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
 
-  const requestIdRef = useRef(0);
+  // Mirrors state.epoch for tagging actions from async closures. Never gates
+  // rendered state — the reducer decides what is stale.
+  const epochRef = useRef(0);
+  useEffect(() => { epochRef.current = state.epoch; }, [state.epoch]);
 
   // Keep the config objects in refs so they don't trigger effect re-runs or
   // callback re-creation when the caller passes fresh inline literals each render.
