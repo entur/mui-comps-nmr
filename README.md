@@ -44,7 +44,7 @@ const layout: VehicleLayout = {
 | `endpoint` | `string` | sobek GraphQL endpoint URL. |
 | `headers?` | `Record<string, string>` | Static headers sent with every request. |
 | `getHeaders?` | `() => Record<string, string> \| Promise<...>` | Dynamic headers (e.g. OIDC tokens). Called once per request, so a refreshed token is always picked up. Safe to pass as an inline literal — identity churn never re-triggers a load. |
-| `netexId?` | `string` | Entity to load. Omit for create mode. |
+| `netexId?` | `string` | Entity to load. Omit for create mode. Changing it from set → `undefined` **keeps** the current value (in-progress edits survive) and discards any in-flight load — it does not blank the form. |
 | `mode?` | `'view' \| 'edit'` | Default `'edit'`. |
 | `layout?` | `Layout<EntityField>` | Whitelist of sections (see below). Omitted → flat, all fields. |
 | `variant?` | `'tabs' \| 'stacked'` | ≥2 sections. Default `'tabs'`. |
@@ -142,7 +142,7 @@ then distils that into per-entity modules.
   into individually-addressable entries with their access path (`path:
   ['passengerCapacity', 'seatingCapacity']`). Each entry carries:
   - `kind` — the control family (`text`, `number`, `name`, `switch`, `enum`,
-    `enumMulti`, `grid`).
+    `enumMulti`, `grid`, `reference`, `date`, `datetime`).
   - `path` — access path into the entity value.
   - `options` — enum member list (for `enum`/`enumMulti`).
   - `serverManaged` — **derived, not hand-set**: a field present on the read
@@ -192,20 +192,36 @@ export { FIELDS as vehicleFields } from './vehicle';
 
 ### Ahead-of-backend patch overlay
 
-`schema/sobek.patch.graphqls` is a committed SDL overlay that adds write-only
-fields onto the read types before codegen runs:
+`schema/sobek.patch.graphqls` is a committed SDL overlay applied before codegen
+runs, carrying fields the domain needs but the live sobek schema has not shipped
+yet:
 
 ```graphql
-extend type VehicleType { dataOwnerRef: String }
-extend type Vehicle { dataOwnerRef: String }
+extend type VehicleType {
+  manufacturer: String
+  range: Float
+  fullCharge: Float
+  carLoading: Boolean
+}
+extend input VehicleTypeInput {
+  manufacturer: String
+  range: Float
+  fullCharge: Float
+  carLoading: Boolean
+}
 ```
 
-This satisfies the distill script's "Input ⊆ Entity" check (every field in
-`VehicleTypeInput` must exist on `VehicleType`) so that `dataOwnerRef` is
-included in `FIELDS`. The generated types are therefore deliberately **ahead of
-the live read schema**. This is safe because the library executes no GraphQL
-operations — it only generates types and renders a form. When sobek adds these
-fields to its read types, delete the matching `extend` lines by hand.
+Extending **both** halves is deliberate. The read `type` satisfies the distill
+script's "Input ⊆ Entity" check (every field in `VehicleTypeInput` must exist on
+`VehicleType`). The `input` keeps the field *out* of the `serverManaged` set,
+because distill derives that flag from "present on `Entity`, absent from
+`Input`" — extend only the read type and the field renders permanently locked.
+
+The generated types are therefore deliberately **ahead of the live read
+schema**. This is safe because the library executes no GraphQL operations — it
+only generates types and renders a form. When sobek ships a field for real,
+delete the matching `extend` lines by hand (as was done for `dataOwnerRef`,
+which is now a genuine read-schema field).
 
 ## Building the library
 
