@@ -107,14 +107,8 @@
 
 <div class="callout warn"><strong>Upgrading means editing the URL.</strong> A URL install pins that exact URL in your <code>package-lock.json</code>, so <code>^0.1.0</code> ranges don't work and <code>npm outdated</code> will never tell you a new version exists. Watch the Releases page and bump the URL by hand. This is the cost of not being on a registry — the version scheme is already registry-ready, so if that changes, the install command is the only thing that changes.</div>
 
-<h3>Link it, for active development</h3>
-<p>Use this when you're changing the library and the host side by side. Re-run <code>npm run build</code> after each change — the host consumes <code>dist/</code>, not <code>src/</code>.</p>
-<pre><code>cd mui-comps-nmr &amp;&amp; npm link
-cd ../host-app     &amp;&amp; npm link @entur/mui-comps-nmr</code></pre>
-<div class="callout warn"><strong>Linking is where “two Reacts” bites.</strong> React, MUI and Emotion are externalized from the bundle precisely so the host supplies one shared copy — but a symlinked package resolves them from <em>its own</em> <code>node_modules</code>, which reintroduces the duplicate. Dedupe on the host side (Vite: <code>resolve.dedupe: ['react', 'react-dom', '@mui/material', '@emotion/react', '@emotion/styled']</code>), or prefer the tarball. Symptoms are invalid-hook-call errors and MUI theme/styles not applying.</div>
-
 <h3>Peer dependencies</h3>
-<p>All of these are externalized from the build — the host must have them installed, and their major versions are pinned to match hathor.</p>
+<p>All of these are externalized from the build — the host must have them installed, and their major versions are pinned to match hathor. Externalized means the host supplies one shared copy; if these ever resolve to two copies you get invalid-hook-call errors and MUI styles not applying.</p>
 <table>
   <thead><tr><th>Package</th><th>Range</th><th>Note</th></tr></thead>
   <tbody>
