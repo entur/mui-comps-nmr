@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useReducer, useEffect, useMemo, useCallback, useRef } from 'react';
 import { GraphQLClient } from 'graphql-request';
 import type { FieldSpec } from '../types';
 import { toInputEntity } from '../toInput';
@@ -31,6 +31,76 @@ export interface UseEntityFormProps extends EntityFormConfig {
   onError?: (generalErrors: string[]) => void;
 }
 
+// --- Reducer: explicit async state machine -----------------------------
+//
+// Staleness lives here: every async completion carries the epoch it started
+// with and the reducer no-ops when `action.epoch !== state.epoch`, replacing
+// the scattered `requestId !== requestIdRef.current` guards. `epoch` bumps on
+// every new load/save start and when a load is retired (create mode).
+
+interface EntityFormState<E> {
+  value: E | undefined;
+  loading: boolean;
+  saving: boolean;
+  errors: Record<string, string>;
+  epoch: number;
+}
+
+type EntityFormAction<E> =
+  | { type: 'LOAD_START' }
+  | { type: 'LOAD_SUCCESS'; epoch: number; entity: E | undefined }
+  | { type: 'LOAD_FAILURE'; epoch: number }
+  | { type: 'LOAD_RETIRED' } // netexId removed: abandon in-flight load
+  | { type: 'SAVE_START' }
+  | { type: 'SAVE_SUCCESS'; epoch: number; entity: E | undefined }
+  | { type: 'SAVE_FAILURE'; epoch: number; fieldErrors: Record<string, string> }
+  | { type: 'SAVE_SETTLED' } // release `saving` — deliberately never epoch-gated
+  | { type: 'EDIT'; value: E | undefined };
+
+function entityFormReducer<E>(
+  state: EntityFormState<E>,
+  action: EntityFormAction<E>,
+): EntityFormState<E> {
+  switch (action.type) {
+    case 'LOAD_START':
+      return { ...state, loading: true, epoch: state.epoch + 1 };
+    case 'LOAD_SUCCESS':
+      if (action.epoch !== state.epoch) return state;
+      return { ...state, loading: false, value: action.entity, errors: {} };
+    case 'LOAD_FAILURE':
+      if (action.epoch !== state.epoch) return state;
+      return { ...state, loading: false, errors: { __init: LOAD_ERR } };
+    case 'LOAD_RETIRED':
+      // Keep any locally edited value (create mode), just stop waiting on the
+      // retired load. Bumping epoch makes its late response a no-op. Must not
+      // touch `saving` — an in-flight mutation outlives the load it raced.
+      return { ...state, loading: false, epoch: state.epoch + 1 };
+    case 'SAVE_START':
+      return { ...state, saving: true, epoch: state.epoch + 1 };
+    case 'SAVE_SUCCESS':
+      if (action.epoch !== state.epoch) return state;
+      return { ...state, value: action.entity, errors: {} };
+    case 'SAVE_FAILURE':
+      if (action.epoch !== state.epoch) return state;
+      return { ...state, errors: action.fieldErrors };
+    case 'SAVE_SETTLED':
+      // This save owns the flag: release it whenever still mounted. Never
+      // gated on epoch *or* on a status enum — a load racing the save must
+      // not be able to strand or steal it.
+      return { ...state, saving: false };
+    case 'EDIT':
+      return { ...state, value: action.value };
+  }
+}
+
+const INITIAL_STATE: EntityFormState<any> = {
+  value: undefined,
+  loading: false,
+  saving: false,
+  errors: {},
+  epoch: 0,
+};
+
 // Internal hook — accepts generic E to type the returned entity shape.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function useEntityForm<E>(props: UseEntityFormProps) {
@@ -38,15 +108,28 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
 
   const client = useMemo(() => new GraphQLClient(endpoint), [endpoint]);
 
-  const [value, setValue] = useState<E | undefined>();
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [state, dispatch] = useReducer(
+    entityFormReducer<E>,
+    INITIAL_STATE as EntityFormState<E>,
+  );
+  const { value, errors, loading, saving } = state;
+
+  const setValue = useCallback(
+    (v: E | undefined) => dispatch({ type: 'EDIT', value: v }),
+    [],
+  );
 
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+useEffect(() => {
+  mounted.current = true;
+  return () => { mounted.current = false; };
+}, []);
 
-  const requestIdRef = useRef(0);
+  // Epoch counter for tagging actions from async closures. Bumped in lockstep
+  // with every START/RETIRE dispatch so a closure can capture the epoch it
+  // belongs to synchronously. Never gates rendered state — the reducer decides
+  // what is stale via its own epoch.
+  const epochRef = useRef(0);
 
   // Keep the config objects in refs so they don't trigger effect re-runs or
   // callback re-creation when the caller passes fresh inline literals each render.
@@ -80,21 +163,24 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
     }
   }, []);
 
-  // Load entity by netexId.
+  // Load entity by netexId. Staleness is decided by the reducer via epochs —
+  // the closures below just tag their completion with the epoch they started at.
   useEffect(() => {
     // Create mode (netexId omitted): keep any locally edited value, but retire
     // any load still in flight for the previous netexId — otherwise its late
-    // response passes the staleness check below and repopulates the create form
-    // (and `loading` never clears if it never resolves).
+    // response passes the epoch check and repopulates the create form (and
+    // `loading` never clears if it never resolves).
     if (!netexId) {
-      requestIdRef.current++;
-      if (mounted.current) setLoading(false);
+      if (mounted.current) {
+        epochRef.current++;
+        dispatch({ type: 'LOAD_RETIRED' });
+      }
       return;
     }
 
-    const requestId = ++requestIdRef.current;
     const query = queryRef.current;
-    setLoading(true);
+    const epoch = ++epochRef.current;
+    dispatch({ type: 'LOAD_START' });
 
     resolveHeaders()
       .then(authHeaders => {
@@ -102,17 +188,13 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
         return client.request(query.document, query.variables(netexId));
       })
       .then((data: any) => {
-        if (!mounted.current || requestId !== requestIdRef.current) return;
+        if (!mounted.current) return;
         const entity = query.resultPath.reduce((o: any, k: string | number) => o?.[k], data);
-        setValue(entity);
-        setErrors({});
+        dispatch({ type: 'LOAD_SUCCESS', epoch, entity });
       })
       .catch(_e => {
-        if (!mounted.current || requestId !== requestIdRef.current) return;
-        setErrors({ __init: LOAD_ERR });
-      })
-      .finally(() => {
-        if (mounted.current && requestId === requestIdRef.current) setLoading(false);
+        if (!mounted.current) return;
+        dispatch({ type: 'LOAD_FAILURE', epoch });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, netexId, resolveHeaders]);
@@ -120,12 +202,12 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
   // Save + refetch
   const handleSave = useCallback(async () => {
     if (!value) return;
-    const requestId = ++requestIdRef.current;
     const query = queryRef.current;
     const mutation = mutationRef.current;
     const fields = fieldsRef.current;
 
-    setSaving(true);
+    const epoch = ++epochRef.current;
+    dispatch({ type: 'SAVE_START' });
     try {
       client.setHeaders(await resolveHeaders());
       const input = toInputEntity(value, fields);
@@ -134,20 +216,19 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
 
       // Guard against concurrent save+netexId changes: abort the refetch if
       // another request (load or save) has started in the meantime.
-      if (requestId !== requestIdRef.current || !mounted.current) return;
+      if (epoch !== epochRef.current || !mounted.current) return;
 
       const refreshedData: any = await client.request(query.document, query.variables(returnedId));
       const refreshed = query.resultPath.reduce((o: any, k: string | number) => o?.[k], refreshedData);
 
-      if (mounted.current && requestId === requestIdRef.current) {
-        setValue(refreshed);
-        setErrors({});
+      if (mounted.current && epoch === epochRef.current) {
+        dispatch({ type: 'SAVE_SUCCESS', epoch, entity: refreshed });
         onSaved?.(returnedId);
       }
     } catch (e) {
-      if (mounted.current && requestId === requestIdRef.current) {
+      if (mounted.current && epoch === epochRef.current) {
         const { fieldErrors, generalErrors } = normalizeEntityErrors(e, fields);
-        setErrors(fieldErrors);
+        dispatch({ type: 'SAVE_FAILURE', epoch, fieldErrors });
         // Transport/unknown errors carry no GraphQL error array — without a
         // fallback the save would fail entirely silently.
         const general =
@@ -158,10 +239,10 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
       }
     } finally {
       // This save owns the flag, so release it whenever still mounted — gating on
-      // requestId leaves it stuck true if a load bumped the id mid-save.
+      // epoch leaves it stuck true if a load bumped the epoch mid-save.
       // (With genuinely concurrent saves the older one clears first; acceptable
       // for a single boolean, revisit if concurrent saves become real.)
-      if (mounted.current) setSaving(false);
+      if (mounted.current) dispatch({ type: 'SAVE_SETTLED' });
     }
   }, [value, client, resolveHeaders, onSaved, onError]);
 
