@@ -171,8 +171,10 @@ useEffect(() => {
     // response passes the epoch check and repopulates the create form (and
     // `loading` never clears if it never resolves).
     if (!netexId) {
-      epochRef.current++;
-      if (mounted.current) dispatch({ type: 'LOAD_RETIRED' });
+      if (mounted.current) {
+        epochRef.current++;
+        dispatch({ type: 'LOAD_RETIRED' });
+      }
       return;
     }
 
