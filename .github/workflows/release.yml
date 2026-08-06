@@ -1,0 +1,66 @@
+name: Release
+
+# Publishes the packed library tarball as a GitHub Release asset.
+#
+# Trigger: push a tag `v<version>` whose version matches package.json. The build
+# downloads the live sobek schema, so a release is a function of the source *and*
+# the schema at build time — hence the provenance line appended to the notes.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify tag matches package.json version
+        run: |
+          pkg="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$pkg" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json $pkg"
+            exit 1
+          fi
+
+      # `prepack` runs `npm run build`, which regenerates types from the live
+      # sobek schema before Vite builds the library.
+      - name: Pack
+        run: npm pack
+
+      - name: Collect schema provenance
+        id: schema
+        run: |
+          f=schema/sobek.schema.graphqls
+          echo "bytes=$(stat -c%s "$f")" >> "$GITHUB_OUTPUT"
+          echo "fetched=$(date -u -r "$f" +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      # Two calls on purpose: how `--notes` composes with `--generate-notes` is
+      # unverified, and guessing wrong would silently drop the generated
+      # changelog. Create with generated notes, then append provenance.
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            "entur-mui-comps-nmr-$v.tgz"
+          gh release view "$GITHUB_REF_NAME" --json body -q .body > notes.md
+          {
+            echo
+            echo "---"
+            echo "Built against sobek schema: ${{ steps.schema.outputs.bytes }} bytes, fetched ${{ steps.schema.outputs.fetched }}"
+          } >> notes.md
+          gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
