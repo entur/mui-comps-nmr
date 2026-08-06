@@ -95,7 +95,8 @@ function entityFormReducer<E>(
 
 const INITIAL_STATE: EntityFormState<any> = {
   value: undefined,
-  status: 'idle',
+  loading: false,
+  saving: false,
   errors: {},
   epoch: 0,
 };
