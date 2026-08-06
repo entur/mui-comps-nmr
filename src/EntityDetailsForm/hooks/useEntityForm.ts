@@ -84,9 +84,10 @@ function entityFormReducer<E>(
       if (action.epoch !== state.epoch) return state;
       return { ...state, errors: action.fieldErrors };
     case 'SAVE_SETTLED':
-      // Owns the flag: release it whenever still mounted — gating on epoch
-      // leaves it stuck 'saving' if a load bumped the epoch mid-save.
-      return state.status === 'saving' ? { ...state, status: 'idle' } : state;
+      // This save owns the flag: release it whenever still mounted. Never
+      // gated on epoch *or* on a status enum — a load racing the save must
+      // not be able to strand or steal it.
+      return { ...state, saving: false };
     case 'EDIT':
       return { ...state, value: action.value };
   }
