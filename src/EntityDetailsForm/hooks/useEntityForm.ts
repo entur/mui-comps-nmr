@@ -122,7 +122,10 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
   );
 
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+useEffect(() => {
+  mounted.current = true;
+  return () => { mounted.current = false; };
+}, []);
 
   // Epoch counter for tagging actions from async closures. Bumped in lockstep
   // with every START/RETIRE dispatch so a closure can capture the epoch it
