@@ -63,19 +63,20 @@ function entityFormReducer<E>(
 ): EntityFormState<E> {
   switch (action.type) {
     case 'LOAD_START':
-      return { ...state, status: 'loading', epoch: state.epoch + 1 };
+      return { ...state, loading: true, epoch: state.epoch + 1 };
     case 'LOAD_SUCCESS':
       if (action.epoch !== state.epoch) return state;
-      return { ...state, status: 'idle', value: action.entity, errors: {} };
+      return { ...state, loading: false, value: action.entity, errors: {} };
     case 'LOAD_FAILURE':
       if (action.epoch !== state.epoch) return state;
-      return { ...state, status: 'idle', errors: { __init: LOAD_ERR } };
+      return { ...state, loading: false, errors: { __init: LOAD_ERR } };
     case 'LOAD_RETIRED':
       // Keep any locally edited value (create mode), just stop waiting on the
-      // retired load. Bumping epoch makes its late response a no-op.
-      return { ...state, status: 'idle', epoch: state.epoch + 1 };
+      // retired load. Bumping epoch makes its late response a no-op. Must not
+      // touch `saving` — an in-flight mutation outlives the load it raced.
+      return { ...state, loading: false, epoch: state.epoch + 1 };
     case 'SAVE_START':
-      return { ...state, status: 'saving', epoch: state.epoch + 1 };
+      return { ...state, saving: true, epoch: state.epoch + 1 };
     case 'SAVE_SUCCESS':
       if (action.epoch !== state.epoch) return state;
       return { ...state, value: action.entity, errors: {} };
