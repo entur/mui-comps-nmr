@@ -78,7 +78,7 @@
 <header class="doc">
   <p class="kicker">Host integration guide · @entur/mui-comps-nmr</p>
   <h1>Dropping <code>VehicleForm</code> into your app</h1>
-  <p class="sub">A practical walkthrough for the app embedding these components: wiring auth, and handling <strong>new</strong> / <strong>edit + save</strong> / <strong>cancel</strong>. Everything here is about the props you pass and the callbacks you receive — nothing about how the component works inside.</p>
+  <p class="sub">A practical walkthrough for the app embedding these components: installing the package, wiring auth, and handling <strong>new</strong> / <strong>edit + save</strong> / <strong>cancel</strong>. Everything here is about the props you pass and the callbacks you receive — nothing about how the component works inside.</p>
 </header>
 
 <p class="lead">The library gives you <strong>data-aware</strong> form components — <code>VehicleForm</code> and <code>VehicleTypeForm</code>. You hand each one a GraphQL <code>endpoint</code>, a way to authenticate, and (optionally) the id of a record to edit. It loads the record, renders the form, and saves changes back for you. You don't write queries, mutations, or a save handler.</p>
@@ -86,6 +86,7 @@
 <div class="toc">
   <strong>In this guide</strong>
   <ol>
+    <li><a href="#install">Installing the package</a></li>
     <li><a href="#import">Import &amp; the shape of a form</a></li>
     <li><a href="#auth">Authentication — <code>headers</code> vs <code>getHeaders</code></a></li>
     <li><a href="#stability">Reloads — what triggers one</a></li>
@@ -96,7 +97,48 @@
   </ol>
 </div>
 
-<h2 id="import"><span class="num">1</span>Import &amp; the shape of a form</h2>
+<h2 id="install"><span class="num">1</span>Installing the package</h2>
+
+<div class="callout good"><strong>Install from a GitHub Release.</strong> The repo is public, so the tarball URL needs no token:</div>
+
+<pre><code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.1.0/entur-mui-comps-nmr-0.1.0.tgz</code></pre>
+
+<p>Releases are listed at <a href="https://github.com/entur/mui-comps-nmr/releases">github.com/entur/mui-comps-nmr/releases</a>. Each carries one <code>.tgz</code> asset plus a note recording which sobek schema it was built against. The package is <em>not</em> on the npm registry — <code>npm i @entur/mui-comps-nmr</code> returns a 404.</p>
+
+<div class="callout warn"><strong>Upgrading means editing the URL.</strong> A URL install pins that exact URL in your <code>package-lock.json</code>, so <code>^0.1.0</code> ranges don't work and <code>npm outdated</code> will never tell you a new version exists. Watch the Releases page and bump the URL by hand. This is the cost of not being on a registry — the version scheme is already registry-ready, so if that changes, the install command is the only thing that changes.</div>
+
+<h3>Building from source</h3>
+<p>Only needed if you're changing the library itself, or want a build ahead of the next release. Note that <code>npm i github:entur/mui-comps-nmr</code> is <em>not</em> a shortcut — <code>files</code> is <code>["dist"]</code> and <code>dist/</code> is git-ignored, so a git install fetches no code.</p>
+<pre><code>git clone git@github.com:entur/mui-comps-nmr.git
+cd mui-comps-nmr
+npm ci
+npm pack               # prepack builds dist/ → entur-mui-comps-nmr-0.1.0.tgz
+
+# in the host app
+npm i ../mui-comps-nmr/entur-mui-comps-nmr-0.1.0.tgz</code></pre>
+<div class="callout"><strong>Building needs network access.</strong> The <code>prebuild</code> chain regenerates types from the live sobek schema at <code>https://entur.github.io/sobek/schema.graphqls</code> before Vite runs. Offline, the build fails at the fetch step, not at compile. This is also why a release records the schema it was built against.</div>
+
+<h3>Link it, for active development</h3>
+<p>Use this when you're changing the library and the host side by side. Re-run <code>npm run build</code> after each change — the host consumes <code>dist/</code>, not <code>src/</code>.</p>
+<pre><code>cd mui-comps-nmr &amp;&amp; npm link
+cd ../host-app     &amp;&amp; npm link @entur/mui-comps-nmr</code></pre>
+<div class="callout warn"><strong>Linking is where “two Reacts” bites.</strong> React, MUI and Emotion are externalized from the bundle precisely so the host supplies one shared copy — but a symlinked package resolves them from <em>its own</em> <code>node_modules</code>, which reintroduces the duplicate. Dedupe on the host side (Vite: <code>resolve.dedupe: ['react', 'react-dom', '@mui/material', '@emotion/react', '@emotion/styled']</code>), or prefer the tarball. Symptoms are invalid-hook-call errors and MUI theme/styles not applying.</div>
+
+<h3>Peer dependencies</h3>
+<p>All of these are externalized from the build — the host must have them installed, and their major versions are pinned to match hathor.</p>
+<table>
+  <thead><tr><th>Package</th><th>Range</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td><code>react</code>, <code>react-dom</code></td><td><code>^19.1.0</code></td><td>React 19 only.</td></tr>
+    <tr><td><code>@mui/material</code></td><td><code>^7.0.2</code></td><td>Every control is MUI v7.</td></tr>
+    <tr><td><code>@mui/icons-material</code></td><td><code>^7.0.2</code></td><td></td></tr>
+    <tr><td><code>@mui/x-data-grid</code></td><td><code>^8.29.1</code></td><td>Loaded lazily, only when a <code>grid</code> field renders — but still required.</td></tr>
+    <tr><td><code>@emotion/react</code>, <code>@emotion/styled</code></td><td><code>^11.14.0</code></td><td>MUI's styling engine.</td></tr>
+  </tbody>
+</table>
+<div class="callout good"><strong>The GraphQL client is bundled.</strong> <code>graphql-request</code> and the slice of <code>graphql</code> it needs are compiled into <code>dist/</code>, so the host installs no GraphQL packages and the library never touches your Apollo/urql client or its cache.</div>
+
+<h2 id="import"><span class="num">2</span>Import &amp; the shape of a form</h2>
 <p>Both components are named exports. They render the fields plus — in edit mode — their own <strong>Save</strong> button. You place the component wherever you want the form to appear.</p>
 <pre><code>import { VehicleForm, VehicleTypeForm } from '@entur/mui-comps-nmr';
 
@@ -111,9 +153,9 @@
   <thead><tr><th>Prop</th><th>Type</th><th>What it's for</th></tr></thead>
   <tbody>
     <tr><td><code>endpoint</code> <span class="req">required</span></td><td><code>string</code></td><td>The GraphQL URL to load from and save to.</td></tr>
-    <tr><td><code>netexId</code></td><td><code>string</code></td><td>The record to load and edit. <strong>Omit it at mount to start a blank “new” form</strong> (§4).</td></tr>
+    <tr><td><code>netexId</code></td><td><code>string</code></td><td>The record to load and edit. <strong>Omit it at mount to start a blank “new” form</strong> (§5).</td></tr>
     <tr><td><code>headers</code></td><td><code>Record&lt;string,string&gt;</code></td><td>Static request headers (fixed API keys, tenant ids…).</td></tr>
-    <tr><td><code>getHeaders</code></td><td><code>() =&gt; headers \| Promise&lt;headers&gt;</code></td><td>Headers computed at request time — use this for auth tokens (see §2).</td></tr>
+    <tr><td><code>getHeaders</code></td><td><code>() =&gt; headers \| Promise&lt;headers&gt;</code></td><td>Headers computed at request time — use this for auth tokens (see §3).</td></tr>
     <tr><td><code>mode</code></td><td><code>'view' \| 'edit'</code></td><td>Default <code>'edit'</code>. <code>'view'</code> disables every input and hides Save.</td></tr>
     <tr><td><code>onSaved</code></td><td><code>(netexId) =&gt; void</code></td><td>Called after a save succeeds; receives the saved record's id.</td></tr>
     <tr><td><code>onError</code></td><td><code>(msgs: string[]) =&gt; void</code></td><td>Called with general (non-field) error messages when a save fails.</td></tr>
@@ -123,11 +165,11 @@
 <div class="callout"><strong>Field-level errors are handled for you.</strong> When a save fails validation, the offending inputs show their messages inline automatically. <code>onError</code> only receives the <em>general</em> messages that don't belong to a single field, so you can show a banner or toast. If a save fails with no usable GraphQL error payload (network drop, malformed response), you still get one message: <code>['Failed to save']</code>.</div>
 <div class="callout warn"><strong><code>onError</code> is save-only, and loads currently fail quietly.</strong> While the initial load is in flight the component renders a bare <code>Loading...</code> placeholder; if that load fails, nothing calls <code>onError</code> and no message reaches the UI — you get an empty form. If a failed load must be visible in your app, verify the record exists before mounting the form, or wrap it in your own error boundary/state.</div>
 
-<h2 id="auth"><span class="num">2</span>Authentication</h2>
+<h2 id="auth"><span class="num">3</span>Authentication</h2>
 <p>You have two ways to attach credentials. Pick based on whether the value is fixed or has to be fetched fresh each time.</p>
 
 <h3><code>headers</code> — fixed values</h3>
-<p>A plain object, sent as-is on every request. Good for things that never change during the session. An inline object literal is fine — see §3:</p>
+<p>A plain object, sent as-is on every request. Good for things that never change during the session. An inline object literal is fine — see §4:</p>
 <pre><code>&lt;VehicleForm endpoint={endpoint} headers={{ 'X-Tenant': 'entur' }} /&gt;</code></pre>
 
 <h3><code>getHeaders</code> — tokens &amp; anything async</h3>
@@ -144,21 +186,21 @@ const auth = useAuth();
 /&gt;</code></pre>
 <div class="callout good"><strong>You can use both.</strong> When you pass <code>headers</code> and <code>getHeaders</code> together, they're combined — <code>getHeaders</code> wins on any key it also sets. So put constants in <code>headers</code> and the token in <code>getHeaders</code>.</div>
 
-<h2 id="stability"><span class="num">3</span>Reloads — what triggers one</h2>
+<h2 id="stability"><span class="num">4</span>Reloads — what triggers one</h2>
 <p>A reload replaces whatever the user was editing with freshly-loaded server values, so it matters which props can cause one. The list is short:</p>
 <table>
   <thead><tr><th>Prop changes</th><th>Effect</th></tr></thead>
   <tbody>
-    <tr><td><code>netexId</code></td><td>Reloads that record (or, if it becomes <code>undefined</code>, retires the in-flight load — see §4).</td></tr>
+    <tr><td><code>netexId</code></td><td>Reloads that record (or, if it becomes <code>undefined</code>, retires the in-flight load — see §5).</td></tr>
     <tr><td><code>endpoint</code></td><td>New client, reloads.</td></tr>
     <tr><td><code>headers</code> / <code>getHeaders</code></td><td><strong>Nothing.</strong> They're read fresh on every request, not watched.</td></tr>
   </tbody>
 </table>
 <div class="callout good"><strong>Inline <code>headers</code>/<code>getHeaders</code> literals are safe.</strong> The component reads them per request rather than treating their identity as a dependency, so a new object or closure on every render costs nothing — no re-authentication, no reload, no lost edits. You do not need <code>useCallback</code>, <code>useMemo</code>, or module-scope constants here.</div>
 <p>Because <code>getHeaders</code> is called immediately before each request, a token that refreshes in the background is always picked up — no prop change needed.</p>
-<div class="callout warn"><strong>The flip side: changing auth won't reload the record.</strong> Since these props aren't watched, swapping tenant or credentials mid-session leaves the currently-loaded record on screen; only the <em>next</em> request uses the new headers. If a header change should mean “different data,” force it yourself with a <code>key</code> bump (§4).</div>
+<div class="callout warn"><strong>The flip side: changing auth won't reload the record.</strong> Since these props aren't watched, swapping tenant or credentials mid-session leaves the currently-loaded record on screen; only the <em>next</em> request uses the new headers. If a header change should mean “different data,” force it yourself with a <code>key</code> bump (§5).</div>
 
-<h2 id="actions"><span class="num">4</span>New, Save, and Cancel</h2>
+<h2 id="actions"><span class="num">5</span>New, Save, and Cancel</h2>
 <p>These three host actions map onto the interface as follows. Note that <strong>Save is built in</strong> — you don't render or trigger it; you react to its result.</p>
 
 <div class="actions">
@@ -225,13 +267,13 @@ const auth = useAuth();
 }</code></pre>
 <div class="callout good"><strong>Use <code>key</code> when switching records, too.</strong> Setting <code>key={netexId}</code> (or <code>netexId ?? 'new'</code>) guarantees that moving from one record to another — or from a record to a blank “new” form — starts clean, with no chance of one record's edits bleeding into the next.</div>
 
-<h2 id="view"><span class="num">5</span>Read-only (view) mode</h2>
+<h2 id="view"><span class="num">6</span>Read-only (view) mode</h2>
 <p>Pass <code>mode="view"</code> to show the same fields with every input disabled and no Save button — useful for a details pane or a permission-gated screen.</p>
 <pre><code>&lt;VehicleForm endpoint={endpoint} getHeaders={getHeaders}
              netexId={id} mode="view" /&gt;</code></pre>
 <p>Flip <code>mode</code> between <code>'view'</code> and <code>'edit'</code> to toggle an edit affordance in your own toolbar.</p>
 
-<h2 id="full"><span class="num">6</span>A complete host page</h2>
+<h2 id="full"><span class="num">7</span>A complete host page</h2>
 <p>List on the left, form on the right. Auth from your app's hook, <code>key</code> for clean switching, view↔edit toggle, and a cancel that discards.</p>
 <pre><code>import { useState } from 'react';
 import { VehicleForm } from '@entur/mui-comps-nmr';
@@ -290,8 +332,9 @@ export function VehiclesPage({ vehicles, refetchList }) {
   );
 }</code></pre>
 
-<h2 id="checklist"><span class="num">7</span>Checklist</h2>
+<h2 id="checklist"><span class="num">8</span>Checklist</h2>
 <ul class="tight">
+  <li><span class="pill">install</span> <code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.1.0/entur-mui-comps-nmr-0.1.0.tgz</code> — no token. Upgrades are manual URL edits. Host supplies React 19 / MUI 7 / x-data-grid 8 / Emotion 11.</li>
   <li><span class="pill">endpoint</span> Always required — your GraphQL URL.</li>
   <li><span class="pill">auth</span> Token → <code>getHeaders</code> (may be async); constants → <code>headers</code>. Both allowed.</li>
   <li><span class="pill">stable</span> No memoization needed — inline <code>headers</code>/<code>getHeaders</code> literals are safe; they're read per request, not watched. Only <code>netexId</code> and <code>endpoint</code> trigger a reload.</li>

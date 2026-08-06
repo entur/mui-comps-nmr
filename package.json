@@ -1,6 +1,6 @@
 {
   "name": "@entur/mui-comps-nmr",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "MUI component library for Entur's hathor frontend — React, typed from the sobek GraphQL schema.",
   "license": "EUPL-1.2",
   "type": "module",
@@ -25,6 +25,7 @@
     "pregenerate": "npm run distill",
     "generate": "tsx scripts/generateDocuments.ts && graphql-codegen --config codegen-operations.ts && tsx scripts/generateWrappers.ts",
     "prebuild": "npm run generate",
+    "prepack": "npm run build",
     "build": "vite build",
     "prestorybook": "npm run generate",
     "storybook": "storybook dev -p 6006",
