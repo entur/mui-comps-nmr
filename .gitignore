@@ -10,3 +10,4 @@ src/generated/
 # misc
 *.log
 .DS_Store
+docs/superpowers

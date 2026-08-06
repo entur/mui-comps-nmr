@@ -88,19 +88,5 @@ sobek ships a field for real, delete matching `extend` lines by hand (done for
 
 `npm run build` — Vite library mode → `dist/`. Emits ESM (`index.js`), CJS
 (`index.cjs`), types (`index.d.ts` via `vite-plugin-dts`). React/MUI/Emotion are
-externalized peer deps — host owns single copy (avoids "two Reacts").
-
-## Commands
-
-| Script | Does |
-| --- | --- |
-| `npm run codegen` | Download schema → `src/generated/sobekTypes.ts`. |
-| `npm run distill` | codegen → write `src/entities/*`. |
-| `npm run build` | Lib build → `dist/` (distill first). |
-| `npm run storybook` | Local Storybook :6006 (distill first). |
-| `npm run build-storybook` | Static Storybook (distill first). |
-| `npm run test` | Vitest (distill first). |
-| `npm run typecheck` | `tsc --noEmit` (distill first). |
-
-Every script chains `distill` via pre-hooks. React 19, MUI 7, Emotion 11 pinned
-to match hathor — peer deps, host owns versions.
+externalized peer deps — host owns single copy (avoids "two Reacts"). React 19,
+MUI 7, Emotion 11 pinned to match hathor.

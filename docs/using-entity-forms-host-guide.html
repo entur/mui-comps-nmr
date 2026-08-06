@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Using VehicleForm &amp; VehicleTypeForm — host guide</title>
+<style>
+  :root {
+    --bg: #fbfaf8; --panel: #ffffff; --ink: #1c1b19; --muted: #6b6862;
+    --line: #e6e2da; --accent: #b4531f; --accent-soft: #f4e6dc;
+    --good: #2f6b3a; --good-soft: #e4efe4; --warn: #8a5a00; --warn-soft: #f6ecd6;
+    --code-bg: #f5f2ec; --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16150f; --panel: #201e17; --ink: #ece7dc; --muted: #9d988c;
+      --line: #34312a; --accent: #e6884f; --accent-soft: #33261c;
+      --good: #7fc98a; --good-soft: #1e2a1f; --warn: #d9ae5a; --warn-soft: #2c2416;
+      --code-bg: #1a1913;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans);
+    line-height: 1.6; font-size: 16px; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 3.5rem 1.4rem 6rem; }
+  header.doc { border-bottom: 2px solid var(--accent); padding-bottom: 1.4rem; margin-bottom: 2.2rem; }
+  .kicker { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 .6rem; }
+  h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 .5rem; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0; font-size: 1.02rem; }
+  h2 { font-size: 1.35rem; margin: 2.8rem 0 1rem; letter-spacing: -.01em;
+    border-top: 1px solid var(--line); padding-top: 1.6rem; }
+  h2 .num { font-family: var(--mono); font-size: .85rem; color: var(--accent); margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.6rem 0 .5rem; }
+  p { margin: .8rem 0; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--code-bg);
+    padding: .12em .38em; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
+    padding: 1rem 1.15rem; overflow-x: auto; font-family: var(--mono); font-size: .82rem;
+    line-height: 1.55; margin: 1rem 0; }
+  pre code { background: none; padding: 0; }
+  .lead { font-size: 1.06rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1.1rem 0; font-size: .9rem;
+    display: block; overflow-x: auto; }
+  th, td { text-align: left; padding: .62rem .8rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+  .req { color: var(--accent); font-family: var(--mono); font-size: .72rem; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: .9rem 1.1rem; border-radius: 0 10px 10px 0; margin: 1.3rem 0; font-size: .95rem; }
+  .callout strong { color: var(--accent); }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.warn strong { color: var(--warn); }
+  .callout.good { border-color: var(--good); background: var(--good-soft); }
+  .callout.good strong { color: var(--good); }
+  ul.tight { margin: .5rem 0; padding-left: 1.2rem; }
+  ul.tight li { margin: .35rem 0; }
+  .actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1.3rem 0; }
+  .actioncard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1.1rem 1.2rem; }
+  .actioncard h4 { margin: 0 0 .4rem; font-size: 1rem; }
+  .actioncard .how { font-family: var(--mono); font-size: .78rem; color: var(--accent); margin-bottom: .5rem; }
+  .actioncard p { margin: .3rem 0; font-size: .88rem; color: var(--muted); }
+  .pill { display: inline-block; font-family: var(--mono); font-size: .72rem; padding: .12em .55em;
+    border-radius: 20px; background: var(--code-bg); border: 1px solid var(--line); }
+  footer.doc { margin-top: 4rem; padding-top: 1.4rem; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: .82rem; }
+  .toc { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.3rem; margin: 1.6rem 0; }
+  .toc ol { margin: .3rem 0; padding-left: 1.3rem; }
+  .toc a { color: var(--ink); text-decoration: none; border-bottom: 1px solid transparent; }
+  .toc a:hover { border-bottom-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <p class="kicker">Host integration guide · @entur/mui-comps-nmr</p>
+  <h1>Dropping <code>VehicleForm</code> into your app</h1>
+  <p class="sub">A practical walkthrough for the app embedding these components: wiring auth, and handling <strong>new</strong> / <strong>edit + save</strong> / <strong>cancel</strong>. Everything here is about the props you pass and the callbacks you receive — nothing about how the component works inside.</p>
+</header>
+
+<p class="lead">The library gives you <strong>data-aware</strong> form components — <code>VehicleForm</code> and <code>VehicleTypeForm</code>. You hand each one a GraphQL <code>endpoint</code>, a way to authenticate, and (optionally) the id of a record to edit. It loads the record, renders the form, and saves changes back for you. You don't write queries, mutations, or a save handler.</p>
+
+<div class="toc">
+  <strong>In this guide</strong>
+  <ol>
+    <li><a href="#import">Import &amp; the shape of a form</a></li>
+    <li><a href="#auth">Authentication — <code>headers</code> vs <code>getHeaders</code></a></li>
+    <li><a href="#stability">Reloads — what triggers one</a></li>
+    <li><a href="#actions">New, Save, and Cancel</a></li>
+    <li><a href="#view">Read-only (view) mode</a></li>
+    <li><a href="#full">A complete host page</a></li>
+    <li><a href="#checklist">Checklist</a></li>
+  </ol>
+</div>
+
+<h2 id="import"><span class="num">1</span>Import &amp; the shape of a form</h2>
+<p>Both components are named exports. They render the fields plus — in edit mode — their own <strong>Save</strong> button. You place the component wherever you want the form to appear.</p>
+<pre><code>import { VehicleForm, VehicleTypeForm } from '@entur/mui-comps-nmr';
+
+&lt;VehicleForm
+  endpoint="https://sobek.example/graphql"
+  getHeaders={authHeaders}
+  netexId="VEH:Vehicle:123"
+/&gt;</code></pre>
+
+<h3>Props you'll use</h3>
+<table>
+  <thead><tr><th>Prop</th><th>Type</th><th>What it's for</th></tr></thead>
+  <tbody>
+    <tr><td><code>endpoint</code> <span class="req">required</span></td><td><code>string</code></td><td>The GraphQL URL to load from and save to.</td></tr>
+    <tr><td><code>netexId</code></td><td><code>string</code></td><td>The record to load and edit. <strong>Omit it at mount to start a blank “new” form</strong> (§4).</td></tr>
+    <tr><td><code>headers</code></td><td><code>Record&lt;string,string&gt;</code></td><td>Static request headers (fixed API keys, tenant ids…).</td></tr>
+    <tr><td><code>getHeaders</code></td><td><code>() =&gt; headers \| Promise&lt;headers&gt;</code></td><td>Headers computed at request time — use this for auth tokens (see §2).</td></tr>
+    <tr><td><code>mode</code></td><td><code>'view' \| 'edit'</code></td><td>Default <code>'edit'</code>. <code>'view'</code> disables every input and hides Save.</td></tr>
+    <tr><td><code>onSaved</code></td><td><code>(netexId) =&gt; void</code></td><td>Called after a save succeeds; receives the saved record's id.</td></tr>
+    <tr><td><code>onError</code></td><td><code>(msgs: string[]) =&gt; void</code></td><td>Called with general (non-field) error messages when a save fails.</td></tr>
+    <tr><td><code>layout</code>, <code>variant</code>, <code>slotProps</code></td><td>—</td><td>Presentation only — which fields/sections show, tabs vs stacked, MUI overrides. Covered in the README.</td></tr>
+  </tbody>
+</table>
+<div class="callout"><strong>Field-level errors are handled for you.</strong> When a save fails validation, the offending inputs show their messages inline automatically. <code>onError</code> only receives the <em>general</em> messages that don't belong to a single field, so you can show a banner or toast. If a save fails with no usable GraphQL error payload (network drop, malformed response), you still get one message: <code>['Failed to save']</code>.</div>
+<div class="callout warn"><strong><code>onError</code> is save-only, and loads currently fail quietly.</strong> While the initial load is in flight the component renders a bare <code>Loading...</code> placeholder; if that load fails, nothing calls <code>onError</code> and no message reaches the UI — you get an empty form. If a failed load must be visible in your app, verify the record exists before mounting the form, or wrap it in your own error boundary/state.</div>
+
+<h2 id="auth"><span class="num">2</span>Authentication</h2>
+<p>You have two ways to attach credentials. Pick based on whether the value is fixed or has to be fetched fresh each time.</p>
+
+<h3><code>headers</code> — fixed values</h3>
+<p>A plain object, sent as-is on every request. Good for things that never change during the session. An inline object literal is fine — see §3:</p>
+<pre><code>&lt;VehicleForm endpoint={endpoint} headers={{ 'X-Tenant': 'entur' }} /&gt;</code></pre>
+
+<h3><code>getHeaders</code> — tokens &amp; anything async</h3>
+<p>A function the component calls to obtain headers right before it needs them. It may return the object directly, or a <code>Promise</code> — so it fits token providers that refresh in the background. This is the right home for an <code>Authorization</code> header.</p>
+<pre><code>// e.g. with react-oidc-context or your own auth hook
+const auth = useAuth();
+
+&lt;VehicleForm
+  endpoint={endpoint}
+  getHeaders={async () =&gt; ({
+    Authorization: `Bearer ${await auth.getAccessToken()}`,
+  })}
+  netexId={id}
+/&gt;</code></pre>
+<div class="callout good"><strong>You can use both.</strong> When you pass <code>headers</code> and <code>getHeaders</code> together, they're combined — <code>getHeaders</code> wins on any key it also sets. So put constants in <code>headers</code> and the token in <code>getHeaders</code>.</div>
+
+<h2 id="stability"><span class="num">3</span>Reloads — what triggers one</h2>
+<p>A reload replaces whatever the user was editing with freshly-loaded server values, so it matters which props can cause one. The list is short:</p>
+<table>
+  <thead><tr><th>Prop changes</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><code>netexId</code></td><td>Reloads that record (or, if it becomes <code>undefined</code>, retires the in-flight load — see §4).</td></tr>
+    <tr><td><code>endpoint</code></td><td>New client, reloads.</td></tr>
+    <tr><td><code>headers</code> / <code>getHeaders</code></td><td><strong>Nothing.</strong> They're read fresh on every request, not watched.</td></tr>
+  </tbody>
+</table>
+<div class="callout good"><strong>Inline <code>headers</code>/<code>getHeaders</code> literals are safe.</strong> The component reads them per request rather than treating their identity as a dependency, so a new object or closure on every render costs nothing — no re-authentication, no reload, no lost edits. You do not need <code>useCallback</code>, <code>useMemo</code>, or module-scope constants here.</div>
+<p>Because <code>getHeaders</code> is called immediately before each request, a token that refreshes in the background is always picked up — no prop change needed.</p>
+<div class="callout warn"><strong>The flip side: changing auth won't reload the record.</strong> Since these props aren't watched, swapping tenant or credentials mid-session leaves the currently-loaded record on screen; only the <em>next</em> request uses the new headers. If a header change should mean “different data,” force it yourself with a <code>key</code> bump (§4).</div>
+
+<h2 id="actions"><span class="num">4</span>New, Save, and Cancel</h2>
+<p>These three host actions map onto the interface as follows. Note that <strong>Save is built in</strong> — you don't render or trigger it; you react to its result.</p>
+
+<div class="actions">
+  <div class="actioncard">
+    <h4>🆕 New</h4>
+    <div class="how">mount without netexId</div>
+    <p>Mount the form <em>without</em> a <code>netexId</code> and you get a blank create form. On save, <code>onSaved</code> hands you the id of the newly created record.</p>
+  </div>
+  <div class="actioncard">
+    <h4>💾 Save</h4>
+    <div class="how">built-in button + onSaved</div>
+    <p>In <code>edit</code> mode the component shows its own Save button and performs the save. You listen with <code>onSaved(id)</code> for success and <code>onError(msgs)</code> for general failures.</p>
+  </div>
+  <div class="actioncard">
+    <h4>↩︎ Cancel / discard</h4>
+    <div class="how">remount with a key</div>
+    <p>There's no cancel button. Edits live inside the form, so to throw them away you remount the component — change its React <code>key</code>, or navigate away. A remount reloads a clean copy.</p>
+  </div>
+</div>
+
+<h3>New</h3>
+<pre><code>// blank form → create a Vehicle
+&lt;VehicleForm endpoint={endpoint} getHeaders={getHeaders} mode="edit" /&gt;
+
+// tell the host when it's been created
+&lt;VehicleForm
+  endpoint={endpoint}
+  getHeaders={getHeaders}
+  onSaved={(newId) =&gt; navigate(`/vehicles/${newId}`)}
+/&gt;</code></pre>
+<div class="callout warn"><strong>Clearing <code>netexId</code> on a mounted form does not blank it.</strong> Going from an id to <code>undefined</code> only abandons the in-flight load — the values already on screen stay, deliberately, so an edit in progress is never wiped. To actually get an empty create form from a form that was showing a record, remount it: <code>key={netexId ?? 'new'}</code>.</div>
+
+<h3>Save</h3>
+<p>You don't call save. The user clicks the built-in button; you respond to the outcome:</p>
+<pre><code>&lt;VehicleForm
+  endpoint={endpoint}
+  getHeaders={getHeaders}
+  netexId={id}
+  onSaved={(id) =&gt; {
+    toast.success('Saved');
+    refetchVehicleList();     // the record is now stale in your list
+  }}
+  onError={(msgs) =&gt; toast.error(msgs.join('\n'))}
+/&gt;</code></pre>
+<div class="callout"><strong>After <code>onSaved</code>, re-pull any of your own copies of the record.</strong> The form shows the freshly-saved values itself, but a list or header elsewhere in your app won't know it changed until you refetch it.</div>
+
+<h3>Cancel / discard</h3>
+<p>Because the form owns the in-progress edits, “cancel” means “give me a fresh copy.” Drive it with a <code>key</code> — bumping the key remounts the form and reloads:</p>
+<pre><code>function EditPane({ id }) {
+  const [rev, setRev] = useState(0); // bump to discard edits
+
+  return (
+    &lt;&gt;
+      &lt;VehicleForm
+        key={`${id}:${rev}`}      {/* new key ⇒ reload clean */}
+        endpoint={endpoint}
+        getHeaders={getHeaders}
+        netexId={id}
+        onSaved={() =&gt; toast.success('Saved')}
+      /&gt;
+      &lt;button onClick={() =&gt; setRev(r =&gt; r + 1)}&gt;Cancel&lt;/button&gt;
+    &lt;/&gt;
+  );
+}</code></pre>
+<div class="callout good"><strong>Use <code>key</code> when switching records, too.</strong> Setting <code>key={netexId}</code> (or <code>netexId ?? 'new'</code>) guarantees that moving from one record to another — or from a record to a blank “new” form — starts clean, with no chance of one record's edits bleeding into the next.</div>
+
+<h2 id="view"><span class="num">5</span>Read-only (view) mode</h2>
+<p>Pass <code>mode="view"</code> to show the same fields with every input disabled and no Save button — useful for a details pane or a permission-gated screen.</p>
+<pre><code>&lt;VehicleForm endpoint={endpoint} getHeaders={getHeaders}
+             netexId={id} mode="view" /&gt;</code></pre>
+<p>Flip <code>mode</code> between <code>'view'</code> and <code>'edit'</code> to toggle an edit affordance in your own toolbar.</p>
+
+<h2 id="full"><span class="num">6</span>A complete host page</h2>
+<p>List on the left, form on the right. Auth from your app's hook, <code>key</code> for clean switching, view↔edit toggle, and a cancel that discards.</p>
+<pre><code>import { useState } from 'react';
+import { VehicleForm } from '@entur/mui-comps-nmr';
+import { useAuth } from './auth';
+
+const ENDPOINT = 'https://sobek.example/graphql';
+
+export function VehiclesPage({ vehicles, refetchList }) {
+  const auth = useAuth();
+  const [selected, setSelected] = useState&lt;string | undefined&gt;();
+  const [mode, setMode] = useState&lt;'view' | 'edit'&gt;('view');
+  const [rev, setRev] = useState(0);
+
+  // no memoization needed — read per request, never a reload trigger
+  const getHeaders = async () =&gt; ({
+    Authorization: `Bearer ${await auth.getAccessToken()}`,
+  });
+
+  const discard = () =&gt; setRev(r =&gt; r + 1);
+
+  return (
+    &lt;div style={{ display: 'flex', gap: 24 }}&gt;
+      &lt;nav&gt;
+        &lt;button onClick={() =&gt; { setSelected(undefined); setMode('edit'); }}&gt;
+          + New vehicle
+        &lt;/button&gt;
+        {vehicles.map(v =&gt; (
+          &lt;button key={v.netexId} onClick={() =&gt; { setSelected(v.netexId); setMode('view'); }}&gt;
+            {v.name}
+          &lt;/button&gt;
+        ))}
+      &lt;/nav&gt;
+
+      &lt;section&gt;
+        &lt;header&gt;
+          {mode === 'view'
+            ? &lt;button onClick={() =&gt; setMode('edit')}&gt;Edit&lt;/button&gt;
+            : &lt;button onClick={() =&gt; { discard(); setMode('view'); }}&gt;Cancel&lt;/button&gt;}
+        &lt;/header&gt;
+
+        &lt;VehicleForm
+          key={`${selected ?? 'new'}:${rev}`}   {/* clean switch + discard */}
+          endpoint={ENDPOINT}
+          getHeaders={getHeaders}
+          netexId={selected}                    {/* undefined ⇒ new */}
+          mode={mode}
+          onSaved={(id) =&gt; {
+            setSelected(id);
+            setMode('view');
+            refetchList();                        // keep the list fresh
+          }}
+          onError={(msgs) =&gt; alert(msgs.join('\n'))}
+        /&gt;
+      &lt;/section&gt;
+    &lt;/div&gt;
+  );
+}</code></pre>
+
+<h2 id="checklist"><span class="num">7</span>Checklist</h2>
+<ul class="tight">
+  <li><span class="pill">endpoint</span> Always required — your GraphQL URL.</li>
+  <li><span class="pill">auth</span> Token → <code>getHeaders</code> (may be async); constants → <code>headers</code>. Both allowed.</li>
+  <li><span class="pill">stable</span> No memoization needed — inline <code>headers</code>/<code>getHeaders</code> literals are safe; they're read per request, not watched. Only <code>netexId</code> and <code>endpoint</code> trigger a reload.</li>
+  <li><span class="pill">new</span> Mount without <code>netexId</code> for a blank create form; get the new id from <code>onSaved</code>. Clearing <code>netexId</code> on a live form keeps its values — remount to blank it.</li>
+  <li><span class="pill">save</span> Built in — the component renders its own Save button; you react via <code>onSaved</code> / <code>onError</code>.</li>
+  <li><span class="pill">cancel</span> No cancel prop — remount via <code>key</code> to discard edits and reload.</li>
+  <li><span class="pill">key</span> Set <code>key={netexId ?? 'new'}</code> so switching records always starts clean.</li>
+  <li><span class="pill">refresh</span> After <code>onSaved</code>, refetch any list/header copies of the record you keep.</li>
+  <li><span class="pill">view</span> <code>mode="view"</code> disables inputs and hides Save.</li>
+  <li><span class="pill">load</span> <code>onError</code> covers saves only — a failed <em>load</em> is silent. Handle it yourself if it matters.</li>
+</ul>
+
+<footer class="doc">
+  Host integration guide for <code>VehicleForm</code> / <code>VehicleTypeForm</code> as exported today from <code>@entur/mui-comps-nmr</code>. Presentation props (<code>layout</code>, <code>variant</code>, <code>slotProps</code>) are documented separately in the README.
+</footer>
+
+</div>
+</body>
+</html>
