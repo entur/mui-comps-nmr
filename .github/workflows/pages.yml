@@ -1,8 +1,14 @@
-name: Storybook
+name: Pages
 
-# Builds the Storybook and publishes it to GitHub Pages on every push to main.
-# The build runs `codegen` first, which downloads the live sobek schema and
-# regenerates the TypeScript types the components are built against.
+# Builds Storybook, assembles the docs site, and publishes it to GitHub Pages on
+# every push to main. The build runs `codegen` first, which downloads the live
+# sobek schema and regenerates the TypeScript types the components are built
+# against.
+#
+# Published layout:
+#   /             landing page      (docs/pages/index.html)
+#   /guide.html   host guide        (docs/using-entity-forms-host-guide.html)
+#   /storybook/   Storybook
 
 on:
   push:
@@ -31,9 +37,17 @@ jobs:
       - run: npm ci
       - run: npm run codegen # downloads schema + regenerates types
       - run: npm run build-storybook
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site/storybook
+          cp -r storybook-static/. _site/storybook/
+          cp docs/pages/index.html _site/index.html
+          cp docs/using-entity-forms-host-guide.html _site/guide.html
+
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: storybook-static
+          path: _site
 
   deploy:
     needs: build

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 storybook-static/
+_site/
 
 # Build artifacts derived from the live sobek schema (regenerated, never edited)
 schema/*
