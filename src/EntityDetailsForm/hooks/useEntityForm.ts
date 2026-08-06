@@ -112,9 +112,7 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
     entityFormReducer<E>,
     INITIAL_STATE as EntityFormState<E>,
   );
-  const { value, errors } = state;
-  const loading = state.status === 'loading';
-  const saving = state.status === 'saving';
+  const { value, errors, loading, saving } = state;
 
   const setValue = useCallback(
     (v: E | undefined) => dispatch({ type: 'EDIT', value: v }),
