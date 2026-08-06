@@ -38,11 +38,10 @@ export interface UseEntityFormProps extends EntityFormConfig {
 // the scattered `requestId !== requestIdRef.current` guards. `epoch` bumps on
 // every new load/save start and when a load is retired (create mode).
 
-type Status = 'idle' | 'loading' | 'saving';
-
 interface EntityFormState<E> {
   value: E | undefined;
-  status: Status;
+  loading: boolean;
+  saving: boolean;
   errors: Record<string, string>;
   epoch: number;
 }
