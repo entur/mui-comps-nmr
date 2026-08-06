@@ -99,21 +99,24 @@
 
 <h2 id="install"><span class="num">1</span>Installing the package</h2>
 
-<div class="callout warn"><strong>Not published yet.</strong> <code>@entur/mui-comps-nmr</code> is a seed project at version <code>0.0.0</code>; it is not on the npm registry, and <code>npm install @entur/mui-comps-nmr</code> returns a 404. Until it ships, you install it from a local build.</div>
+<div class="callout good"><strong>Install from a GitHub Release.</strong> The repo is public, so the tarball URL needs no token:</div>
 
-<p>A plain git install doesn't work either. <code>package.json</code> publishes only <code>dist/</code>, <code>dist/</code> is git-ignored, and there is no <code>prepack</code>/<code>prepublishOnly</code> hook to build it on demand — so <code>npm i github:entur/mui-comps-nmr</code> gives you a package with no build output and an unresolvable import. Build it yourself:</p>
+<pre><code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.1.0/entur-mui-comps-nmr-0.1.0.tgz</code></pre>
 
-<h3>Build a tarball (recommended)</h3>
-<p>Reproducible, and behaves like a real registry install in the host — nothing is symlinked.</p>
+<p>Releases are listed at <a href="https://github.com/entur/mui-comps-nmr/releases">github.com/entur/mui-comps-nmr/releases</a>. Each carries one <code>.tgz</code> asset plus a note recording which sobek schema it was built against. The package is <em>not</em> on the npm registry — <code>npm i @entur/mui-comps-nmr</code> returns a 404.</p>
+
+<div class="callout warn"><strong>Upgrading means editing the URL.</strong> A URL install pins that exact URL in your <code>package-lock.json</code>, so <code>^0.1.0</code> ranges don't work and <code>npm outdated</code> will never tell you a new version exists. Watch the Releases page and bump the URL by hand. This is the cost of not being on a registry — the version scheme is already registry-ready, so if that changes, the install command is the only thing that changes.</div>
+
+<h3>Building from source</h3>
+<p>Only needed if you're changing the library itself, or want a build ahead of the next release. Note that <code>npm i github:entur/mui-comps-nmr</code> is <em>not</em> a shortcut — <code>files</code> is <code>["dist"]</code> and <code>dist/</code> is git-ignored, so a git install fetches no code.</p>
 <pre><code>git clone git@github.com:entur/mui-comps-nmr.git
 cd mui-comps-nmr
 npm ci
-npm run build          # → dist/index.js, index.cjs, index.d.ts
-npm pack               # → entur-mui-comps-nmr-0.0.0.tgz
+npm pack               # prepack builds dist/ → entur-mui-comps-nmr-0.1.0.tgz
 
 # in the host app
-npm i ../mui-comps-nmr/entur-mui-comps-nmr-0.0.0.tgz</code></pre>
-<div class="callout"><strong><code>npm run build</code> needs network access.</strong> The <code>prebuild</code> chain regenerates types from the live sobek schema at <code>https://entur.github.io/sobek/schema.graphqls</code> before Vite runs. Offline, the build fails at the fetch step, not at compile.</div>
+npm i ../mui-comps-nmr/entur-mui-comps-nmr-0.1.0.tgz</code></pre>
+<div class="callout"><strong>Building needs network access.</strong> The <code>prebuild</code> chain regenerates types from the live sobek schema at <code>https://entur.github.io/sobek/schema.graphqls</code> before Vite runs. Offline, the build fails at the fetch step, not at compile. This is also why a release records the schema it was built against.</div>
 
 <h3>Link it, for active development</h3>
 <p>Use this when you're changing the library and the host side by side. Re-run <code>npm run build</code> after each change — the host consumes <code>dist/</code>, not <code>src/</code>.</p>
@@ -331,7 +334,7 @@ export function VehiclesPage({ vehicles, refetchList }) {
 
 <h2 id="checklist"><span class="num">8</span>Checklist</h2>
 <ul class="tight">
-  <li><span class="pill">install</span> Not on npm — clone, <code>npm run build</code>, <code>npm pack</code>, install the tarball. Host supplies React 19 / MUI 7 / x-data-grid 8 / Emotion 11.</li>
+  <li><span class="pill">install</span> <code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.1.0/entur-mui-comps-nmr-0.1.0.tgz</code> — no token. Upgrades are manual URL edits. Host supplies React 19 / MUI 7 / x-data-grid 8 / Emotion 11.</li>
   <li><span class="pill">endpoint</span> Always required — your GraphQL URL.</li>
   <li><span class="pill">auth</span> Token → <code>getHeaders</code> (may be async); constants → <code>headers</code>. Both allowed.</li>
   <li><span class="pill">stable</span> No memoization needed — inline <code>headers</code>/<code>getHeaders</code> literals are safe; they're read per request, not watched. Only <code>netexId</code> and <code>endpoint</code> trigger a reload.</li>
