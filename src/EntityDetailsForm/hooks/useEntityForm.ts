@@ -94,8 +94,6 @@ function entityFormReducer<E>(
 }
 
 const INITIAL_STATE: EntityFormState<any> = {
-const INITIAL_STATE: EntityFormState<any> = {
-const INITIAL_STATE: EntityFormState<any> = {
   value: undefined,
   loading: false,
   saving: false,
