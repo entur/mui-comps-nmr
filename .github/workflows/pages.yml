@@ -56,5 +56,15 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # GitHub's Pages backend takes 8-10 min to publish this site — all of it
+      # after the artifact is handed over, and unrelated to its size (~2 MB, 50
+      # files). The action's 600000 ms default left no margin and PR #16's deploy
+      # timed out at ~11 min. 30 min restores headroom.
+      #
+      # Note: a failed Pages deploy cannot be fixed by re-running the job — a
+      # second deployment for the same commit SHA is cancelled immediately. A
+      # retry needs a new commit.
       - id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          timeout: 1800000
