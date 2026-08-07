@@ -22,9 +22,16 @@ inline literals never re-trigger a load; `dataOwnerRef` is the opposite — it
 joins the load-effect deps so an org switch re-fires every mounted load.
 `dataOwnerRef` is stamped onto the mutation input from context at the wire
 edge (never from form state) and filters both the load and the post-save
-refetch. `netexId` set → `undefined` keeps `value` and retires the in-flight
-load; it does not blank the form. A settled zero-row load renders
-`Not found: <netexId>` instead of a blank editable form. Save failures with
+refetch — but only when the entity's `FIELDS` actually carries `dataOwnerRef`
+as `locked` (registry-driven, not by key name: an Input without it must not
+get one). `netexId` set → `undefined` keeps `value` and retires the in-flight
+load; it does not blank the form. Load settled-ness is a separate `load`
+phase (`idle|pending|ok|error`) returned by the hook — `loading` alone is
+false on the first commit (`LOAD_START` fires from a passive effect), so
+gating not-found on it flashed `Not found` on every mount. `load === 'ok'`
++ no value renders `Not found: <netexId>`; `load === 'error'` renders
+`errors.__init` instead, so a failed load is never reported as a missing
+record. Save failures with
 no GraphQL `errors` array fall back to `onError(['Failed to save'])`. Stale
 responses guarded by a reducer `epoch`; `saving` is released on
 unmount-check alone, never gated on that epoch.
@@ -39,13 +46,18 @@ unmount-check alone, never gated on that epoch.
   travel back as edits. (vs ordinary omitted field, whose value *does* pass
   through `onChange`.) Stale after save — client refetches.
 - `locked` fields (`dataOwnerRef`) — client-supplied but not user-editable:
-  rendered and always disabled even in edit, never in the write payload,
-  errors on them route to `generalErrors`. Distinct from `serverManaged`:
-  that means backend-owned and is *derived* by distill from the Entity/Input
-  diff; `locked` is assigned explicitly via distill's `LOCKED_FIELDS` set.
-  In create mode the wrapper renders the context value via a display-only
-  fallback (`value ?? ({ dataOwnerRef } as Entity)`) — it never reaches the
-  server from form state.
+  rendered and always disabled even in edit, **never sourced from form state**
+  into the write payload (the host supplies the value at the wire edge — the
+  hook stamps `dataOwnerRef` from context, so it *is* sent, just never from
+  the edited entity). Errors on them route to `generalErrors`. Distinct from
+  `serverManaged`: that means backend-owned and is *derived* by distill from
+  the Entity/Input diff; `locked` is assigned explicitly via distill's
+  `LOCKED_FIELDS` set (carried through the `reference` fast-path too, so a
+  locked write-as-reference relation stays locked). The wrapper overlays the
+  context value for display on **every** render
+  (`{ ...(value ?? {}), dataOwnerRef }`), not just while `value` is undefined
+  — otherwise the control keeps showing the org current at first keystroke
+  while the save stamps the new one.
 - Labels default to humanized key. Override per-field `{ field, label }`. No i18n
   dep — localization is client's job.
 - `grid` fields render array-of-obj relations as a read-only table; cols

@@ -10,6 +10,10 @@ import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 // (transport errors, malformed responses). Hosts localize by intercepting these.
 const LOAD_ERR = 'Failed to load', SAVE_ERR = 'Failed to save';
 
+// Registry key of the tenant discriminator. Stamped onto the write payload only
+// when the entity actually carries it as a `locked` field (see handleSave).
+const OWNER_FIELD = 'dataOwnerRef';
+
 export interface EntityFormConfig {
   fields: Record<string, FieldSpec>;
   query: {
@@ -42,7 +46,15 @@ interface EntityFormState<E> {
   saving: boolean;
   errors: Record<string, string>;
   epoch: number;
+  // Settled-ness of the load, distinct from `loading`. `loading` is false on the
+  // first commit (LOAD_START only fires from a passive effect), so it cannot tell
+  // "not started yet" from "settled with zero rows" — consumers rendering a
+  // not-found state must gate on this instead. 'error' also stays distinct from
+  // 'ok' so a failed load is never reported as a missing record.
+  load: LoadPhase;
 }
+
+type LoadPhase = 'idle' | 'pending' | 'ok' | 'error';
 
 type EntityFormAction<E> =
   | { type: 'LOAD_START' }
@@ -61,18 +73,18 @@ function entityFormReducer<E>(
 ): EntityFormState<E> {
   switch (action.type) {
     case 'LOAD_START':
-      return { ...state, loading: true, epoch: state.epoch + 1 };
+      return { ...state, loading: true, load: 'pending', epoch: state.epoch + 1 };
     case 'LOAD_SUCCESS':
       if (action.epoch !== state.epoch) return state;
-      return { ...state, loading: false, value: action.entity, errors: {} };
+      return { ...state, loading: false, load: 'ok', value: action.entity, errors: {} };
     case 'LOAD_FAILURE':
       if (action.epoch !== state.epoch) return state;
-      return { ...state, loading: false, errors: { __init: LOAD_ERR } };
+      return { ...state, loading: false, load: 'error', errors: { __init: LOAD_ERR } };
     case 'LOAD_RETIRED':
       // Keep any locally edited value (create mode), just stop waiting on the
       // retired load. Bumping epoch makes its late response a no-op. Must not
       // touch `saving` — an in-flight mutation outlives the load it raced.
-      return { ...state, loading: false, epoch: state.epoch + 1 };
+      return { ...state, loading: false, load: 'idle', epoch: state.epoch + 1 };
     case 'SAVE_START':
       return { ...state, saving: true, epoch: state.epoch + 1 };
     case 'SAVE_SUCCESS':
@@ -97,6 +109,7 @@ const INITIAL_STATE: EntityFormState<any> = {
   saving: false,
   errors: {},
   epoch: 0,
+  load: 'idle',
 };
 
 // Internal hook — accepts generic E to type the returned entity shape.
@@ -115,7 +128,7 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
     entityFormReducer<E>,
     INITIAL_STATE as EntityFormState<E>,
   );
-  const { value, errors, loading, saving } = state;
+  const { value, errors, loading, saving, load } = state;
 
   const setValue = useCallback(
     (v: E | undefined) => dispatch({ type: 'EDIT', value: v }),
@@ -215,8 +228,13 @@ useEffect(() => {
       client.setHeaders(await resolveHeaders());
       // dataOwnerRef is stamped from context at the wire edge, never sourced
       // from form state — a value loaded under one org must never be written
-      // back under another.
-      const input = { ...toInputEntity(value, fields), dataOwnerRef };
+      // back under another. Driven by the registry, not by the key: an entity
+      // whose Input has no dataOwnerRef (or where distill derived it as
+      // serverManaged) must not get one, or every save fails validation.
+      const writable = toInputEntity(value, fields);
+      const input = fields[OWNER_FIELD]?.locked
+        ? { ...writable, [OWNER_FIELD]: dataOwnerRef }
+        : writable;
       const data: any = await client.request(mutation.document, { input });
       const returnedId: string = mutation.resultPath.reduce((o: any, k: string | number) => o?.[k], data);
 
@@ -255,5 +273,5 @@ useEffect(() => {
     }
   }, [value, client, resolveHeaders, dataOwnerRef, onSaved, onError]);
 
-  return { value, setValue, loading, saving, errors, handleSave };
+  return { value, setValue, loading, saving, load, errors, handleSave };
 }

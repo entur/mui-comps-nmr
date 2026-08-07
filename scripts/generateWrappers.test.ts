@@ -26,15 +26,24 @@ describe('renderWrapperSource', () => {
     );
   });
 
-  it('renders a not-found state for a settled zero-row load (guarded on netexId)', () => {
+  it('gates not-found on the settled load phase, never on `loading`', () => {
+    // `loading` is false on the first commit (LOAD_START fires from a passive
+    // effect), so a not-found branch gated on it flashes on every mount.
+    expect(src).not.toMatch(/!loading && !value && netexId/);
     expect(src).toMatch(
-      /if \(!loading && !value && netexId\) return <div>Not found: \{netexId\}<\/div>;/
+      /if \(netexId && !value && load === 'ok'\) return <div>Not found: \{netexId\}<\/div>;/
     );
   });
 
-  it('falls back to a display-only dataOwnerRef from context in create mode', () => {
+  it('distinguishes a failed load from a missing record', () => {
+    expect(src).toMatch(/if \(netexId && load === 'error'\) return <div>\{errors\.__init\}<\/div>;/);
+  });
+
+  it('overlays the display-only dataOwnerRef from context on every render', () => {
     expect(src).toMatch(/const \{ dataOwnerRef \} = useSobekCtx\(\);/);
-    expect(src).toMatch(/value=\{value \?\? \(\{ dataOwnerRef \} as Vehicle\)\}/);
+    // Not `value ?? …`: that freezes the control at the org current when the
+    // user first typed, while the save stamps whatever context holds now.
+    expect(src).toMatch(/value=\{\{ \.\.\.\(value \?\? \(\{\} as Vehicle\)\), dataOwnerRef \}\}/);
     expect(src).toMatch(/import \{ useSobekCtx \} from '\.\.\/\.\.\/context\/SobekContext';/);
   });
 });

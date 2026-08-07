@@ -20,11 +20,13 @@ export interface VehicleFormProps
 
 export function VehicleForm(props: VehicleFormProps) {
   const { mode = 'edit', layout, variant, slotProps, netexId, ...rest } = props;
-  // Display-only: seeds the locked dataOwnerRef control in create mode. The
-  // write payload and the load filter read context inside the hook — this
-  // value never reaches the server from here.
+  // Display-only: renders the locked dataOwnerRef control. Overlaid on every
+  // render, not just while `value` is undefined — otherwise the control keeps
+  // showing the org that was current when the user first typed. The write
+  // payload and the load filter read context inside the hook; this value
+  // never reaches the server from here.
   const { dataOwnerRef } = useSobekCtx();
-  const { value, setValue, loading, saving, errors, handleSave } = useEntityForm<Vehicle>({
+  const { value, setValue, loading, saving, load, errors, handleSave } = useEntityForm<Vehicle>({
     fields: FIELDS,
     query: {
       document: GetVehicleDocument,
@@ -39,16 +41,22 @@ export function VehicleForm(props: VehicleFormProps) {
     ...rest,
   });
 
-  if (loading && !value) return <div>Loading...</div>;
+  // Gate on `load`, not `loading`: LOAD_START only fires from a passive
+  // effect, so `loading` is still false on the first commit — gating the
+  // not-found branch on it flashed "Not found" on every mount.
+  if (netexId && !value && (load === 'idle' || load === 'pending'))
+    return <div>Loading...</div>;
+  // A failed load is not a missing record — keep the two distinguishable.
+  if (netexId && load === 'error') return <div>{errors.__init}</div>;
   // Settled zero-row load: never render a blank editable form (saving it
   // would create a new entity instead of editing one). Guarded on netexId
   // so create mode still renders an empty form.
-  if (!loading && !value && netexId) return <div>Not found: {netexId}</div>;
+  if (netexId && !value && load === 'ok') return <div>Not found: {netexId}</div>;
 
   return (
     <>
       <VehicleFormPresentation
-        value={value ?? ({ dataOwnerRef } as Vehicle)}
+        value={{ ...(value ?? ({} as Vehicle)), dataOwnerRef }}
         onChange={setValue}
         mode={mode}
         layout={layout}

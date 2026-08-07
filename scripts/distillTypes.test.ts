@@ -139,4 +139,15 @@ describe('distillModule — reference divergence + date kinds', () => {
     expect(out).toMatch(/rel:\s*\{ kind: 'reference', path: \['rel', 'netexId'\] \}/);
     expect(out).toMatch(/rel\?: Maybe<Ref>;/); // read relation kept verbatim on Entity
   });
+
+  it('carries `locked` through the reference fast-path', () => {
+    // The fast-path `continue`s before deriveFields, so it has to apply `locked`
+    // itself — otherwise a LOCKED_FIELDS member that happens to be written as a
+    // reference is emitted editable and lands in the write payload.
+    const lockedRef = SRC_REF.replace(/\brel\b/g, 'dataOwnerRef');
+    const out2 = distillModule(lockedRef, 'Doc', 'DocInput');
+    expect(out2).toMatch(
+      /dataOwnerRef:\s*\{ kind: 'reference', path: \['dataOwnerRef', 'netexId'\], locked: true \}/
+    );
+  });
 });

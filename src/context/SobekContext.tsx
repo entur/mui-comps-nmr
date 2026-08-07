@@ -6,7 +6,8 @@
  * above. `endpoint` / `headers` / `getHeaders` / `dataOwnerRef` were removed
  * from the generated wrapper props in favour of this single source of truth.
  */
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
+import type { ReactNode } from 'react';
 
 export interface SobekCtx {
   /** GraphQL endpoint of the sobek instance. */
@@ -22,7 +23,30 @@ export interface SobekCtx {
 
 const SobekContext = createContext<SobekCtx | undefined>(undefined);
 
-export const SobekProvider = SobekContext.Provider;
+/**
+ * Typed provider. `value` is required and non-optional, so a host threading a
+ * possibly-undefined session is a compile error rather than a render-time throw
+ * from deep inside a consumer. Memoized per field, so an inline object literal
+ * no longer re-renders every consumer on each host render.
+ *
+ * @param props.value Ambient session inputs.
+ * @param props.children Subtree that may use data-aware components.
+ * @returns The provider element.
+ */
+export function SobekProvider({
+  value,
+  children,
+}: {
+  value: SobekCtx;
+  children: ReactNode;
+}) {
+  const { endpoint, headers, getHeaders, dataOwnerRef } = value;
+  const ctx = useMemo(
+    () => ({ endpoint, headers, getHeaders, dataOwnerRef }),
+    [endpoint, headers, getHeaders, dataOwnerRef]
+  );
+  return <SobekContext.Provider value={ctx}>{children}</SobekContext.Provider>;
+}
 
 export function useSobekCtx(): SobekCtx {
   const ctx = useContext(SobekContext);

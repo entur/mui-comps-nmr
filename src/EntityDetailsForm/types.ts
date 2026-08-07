@@ -45,7 +45,9 @@ export interface FieldSpec {
    *  payload — not round-tripped. Stale after save (client refetches). */
   serverManaged?: boolean;
   /** Client-supplied but not user-editable. Rendered and always disabled (even in
-   *  edit mode); never merged into the write payload. Distinct from
+   *  edit mode). Never sourced from form state into the write payload — the host
+   *  supplies the value at the wire edge instead (`dataOwnerRef` is stamped from
+   *  `SobekProvider`), so an edited entity can't rewrite it. Distinct from
    *  `serverManaged`, which means backend-owned and is *derived* by distill from
    *  the Entity/Input diff — `locked` is assigned explicitly. */
   locked?: boolean;

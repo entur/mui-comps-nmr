@@ -26,6 +26,22 @@ describe('useSobekCtx', () => {
       <SobekProvider value={value}>{children}</SobekProvider>
     );
     const { result } = renderHook(() => useSobekCtx(), { wrapper });
-    expect(result.current).toBe(value);
+    // Not identity: the provider memoizes a fresh object per field, so an inline
+    // literal from the host doesn't re-render every consumer.
+    expect(result.current).toEqual(value);
+  });
+
+  it('keeps the context value stable across re-renders with an inline literal', () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <SobekProvider
+        value={{ endpoint: 'http://sobek.test/graphql', dataOwnerRef: 'NOG:Authority:test' }}
+      >
+        {children}
+      </SobekProvider>
+    );
+    const { result, rerender } = renderHook(() => useSobekCtx(), { wrapper });
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
   });
 });

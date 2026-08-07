@@ -289,7 +289,9 @@ export function distillModule(src: string, entity: string, inpEntity: string): s
     // on the identity leaf (read side would otherwise omit it as a relation).
     const leaf = serverManaged ? undefined : refLeaf(type, inpMembers.get(name), model);
     if (leaf) {
-      fields.push(push(taken, { key: name, kind: 'reference', path: [name, leaf] }));
+      // `locked` rides along: a locked field written as a pure reference is still
+      // locked (fieldLine only emits it when true, so nothing changes downstream).
+      fields.push(push(taken, { key: name, kind: 'reference', path: [name, leaf], locked }));
       continue;
     }
     fields.push(...deriveFields(name, type, model, [], serverManaged, locked, taken));
