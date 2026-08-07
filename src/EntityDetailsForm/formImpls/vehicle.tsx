@@ -2,6 +2,7 @@
 
 import { createAbstractEntityDetailsForm } from '../abstractForm';
 import { useEntityForm } from '../hooks/useEntityForm';
+import { useSobekCtx } from '../../context/SobekContext';
 import { FIELDS } from '../../entities/vehicle';
 import type { Entity as Vehicle } from '../../entities/vehicle';
 import { GetVehicleDocument, UpdateVehicleDocument } from '../../generated/operations/vehicle.generated';
@@ -11,9 +12,6 @@ const VehicleFormPresentation = createAbstractEntityDetailsForm<Vehicle>(FIELDS)
 
 export interface VehicleFormProps
   extends Omit<EntityDetailsFormProps<Vehicle>, 'value' | 'onChange' | 'mode' | 'errors' | 'disabled'> {
-  endpoint: string;
-  headers?: Record<string, string>;
-  getHeaders?: () => Record<string, string> | Promise<Record<string, string>>;
   netexId?: string;
   mode?: 'view' | 'edit';
   onSaved?: (netexId: string) => void;
@@ -21,27 +19,36 @@ export interface VehicleFormProps
 }
 
 export function VehicleForm(props: VehicleFormProps) {
-  const { mode = 'edit', layout, variant, slotProps, ...rest } = props;
+  const { mode = 'edit', layout, variant, slotProps, netexId, ...rest } = props;
+  // Display-only: seeds the locked dataOwnerRef control in create mode. The
+  // write payload and the load filter read context inside the hook — this
+  // value never reaches the server from here.
+  const { dataOwnerRef } = useSobekCtx();
   const { value, setValue, loading, saving, errors, handleSave } = useEntityForm<Vehicle>({
     fields: FIELDS,
     query: {
       document: GetVehicleDocument,
-      variables: (netexId) => ({ filter: { netexIds: [netexId], dataOwnerRef: '' } }),
+      variables: (netexId, dataOwnerRef) => ({ filter: { netexIds: [netexId], dataOwnerRef } }),
       resultPath: ['vehicles', 'content', 0] as const,
     },
     mutation: {
       document: UpdateVehicleDocument,
       resultPath: ['createOrUpdateVehicle'] as const,
     },
+    netexId,
     ...rest,
   });
 
   if (loading && !value) return <div>Loading...</div>;
+  // Settled zero-row load: never render a blank editable form (saving it
+  // would create a new entity instead of editing one). Guarded on netexId
+  // so create mode still renders an empty form.
+  if (!loading && !value && netexId) return <div>Not found: {netexId}</div>;
 
   return (
     <>
       <VehicleFormPresentation
-        value={value ?? ({} as Vehicle)}
+        value={value ?? ({ dataOwnerRef } as Vehicle)}
         onChange={setValue}
         mode={mode}
         layout={layout}
