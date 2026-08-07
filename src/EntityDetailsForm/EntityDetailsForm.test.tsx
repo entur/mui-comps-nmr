@@ -8,18 +8,25 @@ interface V {
   name?: { value?: string | null } | null;
   length?: number | null;
   version?: number | null;
+  dataOwnerRef?: string | null;
 }
 
 const fields: Record<string, FieldSpec> = {
   name: { kind: 'name', path: ['name'] },
   length: { kind: 'number', path: ['length'] },
   version: { kind: 'number', path: ['version'], serverManaged: true },
+  dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'], locked: true },
 };
 
 const Form = createAbstractEntityDetailsForm<V>(fields);
 
 const Host = (props: Partial<EntityDetailsFormProps<V>>) => {
-  const [v, setV] = useState<V>({ name: { value: 'Tram' }, length: 5, version: 1 });
+  const [v, setV] = useState<V>({
+    name: { value: 'Tram' },
+    length: 5,
+    version: 1,
+    dataOwnerRef: 'NOG:Authority:test',
+  });
   return <Form value={v} onChange={setV} mode="edit" {...props} />;
 };
 
@@ -39,6 +46,13 @@ describe('createAbstractEntityDetailsForm', () => {
   it('locks serverManaged fields even in edit mode', () => {
     render(<Host />);
     expect(screen.getByLabelText('Version')).toBeDisabled();
+  });
+
+  it('locks locked fields even in edit mode', () => {
+    render(<Host />);
+    const input = screen.getByLabelText('Data owner ref') as HTMLInputElement;
+    expect(input).toBeDisabled();
+    expect(input.value).toBe('NOG:Authority:test');
   });
 
   it('disables every field in view mode', () => {

@@ -28,6 +28,8 @@ const GEN_IMPORT = '../generated/sobekTypes';
 const TYPES_IMPORT = '../EntityDetailsForm/types';
 const MLS = 'MultilingualString'; // edited via the `name` control, never flattened
 const IDENTITY = new Set(['id', 'netexId']); // an object with one of these is a relation
+/** Fields supplied by SobekProvider, not by the user. Rendered, always locked. */
+const LOCKED_FIELDS = new Set(['dataOwnerRef']);
 
 /** GraphQL scalar → control kind (codegen names; unknown scalars fall back to text). */
 const SCALAR_KIND: Record<string, 'text' | 'number' | 'switch' | 'date' | 'datetime'> = {
@@ -125,6 +127,7 @@ interface FieldOut {
   path: string[];
   optionEnum?: string;
   serverManaged?: boolean;
+  locked?: boolean;
 }
 
 const hasIdentity = (lit: ts.TypeLiteralNode): boolean =>
@@ -194,6 +197,7 @@ const deriveFields = (
   model: Model,
   path: string[],
   serverManaged: boolean,
+  locked: boolean,
   taken: Set<string>
 ): FieldOut[] => {
   const r = resolveType(type, model);
@@ -201,28 +205,34 @@ const deriveFields = (
 
   if (r.enum) {
     const kind = r.isArray ? 'enumMulti' : 'enum';
-    return [push(taken, { key: name, kind, path: here, optionEnum: r.enum, serverManaged })];
+    return [push(taken, { key: name, kind, path: here, optionEnum: r.enum, serverManaged, locked })];
   }
   if (r.scalar) {
     return [
-      push(taken, { key: name, kind: SCALAR_KIND[r.scalar] ?? 'text', path: here, serverManaged }),
+      push(taken, {
+        key: name,
+        kind: SCALAR_KIND[r.scalar] ?? 'text',
+        path: here,
+        serverManaged,
+        locked,
+      }),
     ];
   }
   if (r.object) {
     if (r.object === MLS)
-      return [push(taken, { key: name, kind: 'name', path: here, serverManaged })];
+      return [push(taken, { key: name, kind: 'name', path: here, serverManaged, locked })];
     const lit = model.objects.get(r.object);
     if (!lit) return []; // unknown object → omit (round-trips on Entity)
     // Array of linked entities → read-only grid. `serverManaged` is the flag the
     // caller already derived from the Input boundary (relations are absent from
     // Input, so this lands true) — not hand-tagged downstream.
     if (r.isArray && hasIdentity(lit))
-      return [push(taken, { key: name, kind: 'grid', path: here, serverManaged })];
+      return [push(taken, { key: name, kind: 'grid', path: here, serverManaged, locked })];
     if (hasIdentity(lit)) return []; // single relation → no flat control; omit
     if (r.isArray) return []; // identity-less object array → omit
     // value-object → flatten leaves
     return [...members(lit)].flatMap(([leaf, leafType]) =>
-      deriveFields(leaf, leafType, model, here, serverManaged, taken)
+      deriveFields(leaf, leafType, model, here, serverManaged, locked, taken)
     );
   }
   return []; // unsupported → omit (round-trips on Entity)
@@ -272,14 +282,19 @@ export function distillModule(src: string, entity: string, inpEntity: string): s
   const fields: FieldOut[] = [];
   for (const [name, type] of readMembers) {
     const serverManaged = !inpNames.has(name);
+    // Client-supplied (LOCKED_FIELDS) and user-writable — serverManaged wins if a
+    // field somehow qualifies for both; backend-owned is the stricter claim.
+    const locked = LOCKED_FIELDS.has(name) && !serverManaged;
     // Writable relation written as a pure reference → editable `reference` field
     // on the identity leaf (read side would otherwise omit it as a relation).
     const leaf = serverManaged ? undefined : refLeaf(type, inpMembers.get(name), model);
     if (leaf) {
-      fields.push(push(taken, { key: name, kind: 'reference', path: [name, leaf] }));
+      // `locked` rides along: a locked field written as a pure reference is still
+      // locked (fieldLine only emits it when true, so nothing changes downstream).
+      fields.push(push(taken, { key: name, kind: 'reference', path: [name, leaf], locked }));
       continue;
     }
-    fields.push(...deriveFields(name, type, model, [], serverManaged, taken));
+    fields.push(...deriveFields(name, type, model, [], serverManaged, locked, taken));
   }
 
   // Verbatim interface members + referenced type names.
@@ -304,6 +319,7 @@ export function distillModule(src: string, entity: string, inpEntity: string): s
     const parts = [`kind: '${f.kind}'`, `path: [${f.path.map(p => `'${p}'`).join(', ')}]`];
     if (f.optionEnum) parts.push(`options: Object.values(${f.optionEnum})`);
     if (f.serverManaged) parts.push('serverManaged: true');
+    if (f.locked) parts.push('locked: true');
     return `  ${f.key}: { ${parts.join(', ')} },`;
   };
 

@@ -2,6 +2,7 @@
 
 import { createAbstractEntityDetailsForm } from '../abstractForm';
 import { useEntityForm } from '../hooks/useEntityForm';
+import { useSobekCtx } from '../../context/SobekContext';
 import { FIELDS } from '../../entities/vehicleType';
 import type { Entity as VehicleType } from '../../entities/vehicleType';
 import { GetVehicleTypeDocument, UpdateVehicleTypeDocument } from '../../generated/operations/vehicleType.generated';
@@ -11,9 +12,6 @@ const VehicleTypeFormPresentation = createAbstractEntityDetailsForm<VehicleType>
 
 export interface VehicleTypeFormProps
   extends Omit<EntityDetailsFormProps<VehicleType>, 'value' | 'onChange' | 'mode' | 'errors' | 'disabled'> {
-  endpoint: string;
-  headers?: Record<string, string>;
-  getHeaders?: () => Record<string, string> | Promise<Record<string, string>>;
   netexId?: string;
   mode?: 'view' | 'edit';
   onSaved?: (netexId: string) => void;
@@ -21,27 +19,44 @@ export interface VehicleTypeFormProps
 }
 
 export function VehicleTypeForm(props: VehicleTypeFormProps) {
-  const { mode = 'edit', layout, variant, slotProps, ...rest } = props;
-  const { value, setValue, loading, saving, errors, handleSave } = useEntityForm<VehicleType>({
+  const { mode = 'edit', layout, variant, slotProps, netexId, ...rest } = props;
+  // Display-only: renders the locked dataOwnerRef control. Overlaid on every
+  // render, not just while `value` is undefined — otherwise the control keeps
+  // showing the org that was current when the user first typed. The write
+  // payload and the load filter read context inside the hook; this value
+  // never reaches the server from here.
+  const { dataOwnerRef } = useSobekCtx();
+  const { value, setValue, loading, saving, load, errors, handleSave } = useEntityForm<VehicleType>({
     fields: FIELDS,
     query: {
       document: GetVehicleTypeDocument,
-      variables: (netexId) => ({ filter: { netexIds: [netexId], dataOwnerRef: '' } }),
+      variables: (netexId, dataOwnerRef) => ({ filter: { netexIds: [netexId], dataOwnerRef } }),
       resultPath: ['vehicleTypes', 'content', 0] as const,
     },
     mutation: {
       document: UpdateVehicleTypeDocument,
       resultPath: ['createOrUpdateVehicleType'] as const,
     },
+    netexId,
     ...rest,
   });
 
-  if (loading && !value) return <div>Loading...</div>;
+  // Gate on `load`, not `loading`: LOAD_START only fires from a passive
+  // effect, so `loading` is still false on the first commit — gating the
+  // not-found branch on it flashed "Not found" on every mount.
+  if (netexId && !value && (load === 'idle' || load === 'pending'))
+    return <div>Loading...</div>;
+  // A failed load is not a missing record — keep the two distinguishable.
+  if (netexId && load === 'error') return <div>{errors.__init}</div>;
+  // Settled zero-row load: never render a blank editable form (saving it
+  // would create a new entity instead of editing one). Guarded on netexId
+  // so create mode still renders an empty form.
+  if (netexId && !value && load === 'ok') return <div>Not found: {netexId}</div>;
 
   return (
     <>
       <VehicleTypeFormPresentation
-        value={value ?? ({} as VehicleType)}
+        value={{ ...(value ?? ({} as VehicleType)), dataOwnerRef }}
         onChange={setValue}
         mode={mode}
         layout={layout}

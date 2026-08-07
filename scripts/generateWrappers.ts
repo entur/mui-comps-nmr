@@ -27,24 +27,24 @@ interface ManifestEntry {
   relationFields?: string[];
 }
 
-const main = (): void => {
-  const manifest: ManifestEntry[] = JSON.parse(readFileSync(resolve(MANIFEST), 'utf8'));
-  mkdirSync(resolve(OUT_DIR), { recursive: true });
+/**
+ * Emit the wrapper component source for one manifest entry. Exported for
+ * `generateWrappers.test.ts`, which pins the emitted contract (provider-only
+ * session inputs, not-found branch, create-mode dataOwnerRef fallback).
+ */
+export const renderWrapperSource = (entry: ManifestEntry): string => {
+  const entityName = entry.entity;
+  const fileName = toCamel(entityName);
+  const compName = `${entityName}Form`;
 
-  const exports: string[] = [];
+  const getDoc = `Get${entityName}Document`;
+  const updateDoc = `Update${entityName}Document`;
 
-  for (const entry of manifest) {
-    const entityName = entry.entity;
-    const fileName = toCamel(entityName);
-    const compName = `${entityName}Form`;
-
-    const getDoc = `Get${entityName}Document`;
-    const updateDoc = `Update${entityName}Document`;
-
-    const src = [
+  return [
       BANNER,
       `import { createAbstractEntityDetailsForm } from '../abstractForm';`,
       `import { useEntityForm } from '../hooks/useEntityForm';`,
+      `import { useSobekCtx } from '../../context/SobekContext';`,
       `import { FIELDS } from '../../entities/${fileName}';`,
       `import type { Entity as ${entityName} } from '../../entities/${fileName}';`,
       `import { ${getDoc}, ${updateDoc} } from '../../generated/operations/${fileName}.generated';`,
@@ -54,9 +54,6 @@ const main = (): void => {
       '',
       `export interface ${compName}Props`,
       `  extends Omit<EntityDetailsFormProps<${entityName}>, 'value' | 'onChange' | 'mode' | 'errors' | 'disabled'> {`,
-      `  endpoint: string;`,
-      `  headers?: Record<string, string>;`,
-      `  getHeaders?: () => Record<string, string> | Promise<Record<string, string>>;`,
       `  netexId?: string;`,
       `  mode?: 'view' | 'edit';`,
       `  onSaved?: (netexId: string) => void;`,
@@ -64,27 +61,44 @@ const main = (): void => {
       `}`,
       '',
       `export function ${compName}(props: ${compName}Props) {`,
-      `  const { mode = 'edit', layout, variant, slotProps, ...rest } = props;`,
-      `  const { value, setValue, loading, saving, errors, handleSave } = useEntityForm<${entityName}>({`,
+      `  const { mode = 'edit', layout, variant, slotProps, netexId, ...rest } = props;`,
+      '  // Display-only: renders the locked dataOwnerRef control. Overlaid on every',
+      '  // render, not just while `value` is undefined — otherwise the control keeps',
+      '  // showing the org that was current when the user first typed. The write',
+      '  // payload and the load filter read context inside the hook; this value',
+      '  // never reaches the server from here.',
+      `  const { dataOwnerRef } = useSobekCtx();`,
+      `  const { value, setValue, loading, saving, load, errors, handleSave } = useEntityForm<${entityName}>({`,
       `    fields: FIELDS,`,
       `    query: {`,
       `      document: ${getDoc},`,
-      `      variables: (netexId) => ({ filter: { netexIds: [netexId], dataOwnerRef: '' } }),`,
+      `      variables: (netexId, dataOwnerRef) => ({ filter: { netexIds: [netexId], dataOwnerRef } }),`,
       `      resultPath: ['${entry.queryRoot}', 'content', 0] as const,`,
       `    },`,
       `    mutation: {`,
       `      document: ${updateDoc},`,
       `      resultPath: ['${entry.mutationName}'] as const,`,
       `    },`,
+      `    netexId,`,
       `    ...rest,`,
       `  });`,
       '',
-      `  if (loading && !value) return <div>Loading...</div>;`,
+      '  // Gate on `load`, not `loading`: LOAD_START only fires from a passive',
+      '  // effect, so `loading` is still false on the first commit — gating the',
+      '  // not-found branch on it flashed "Not found" on every mount.',
+      `  if (netexId && !value && (load === 'idle' || load === 'pending'))`,
+      `    return <div>Loading...</div>;`,
+      '  // A failed load is not a missing record — keep the two distinguishable.',
+      `  if (netexId && load === 'error') return <div>{errors.__init}</div>;`,
+      '  // Settled zero-row load: never render a blank editable form (saving it',
+      '  // would create a new entity instead of editing one). Guarded on netexId',
+      '  // so create mode still renders an empty form.',
+      `  if (netexId && !value && load === 'ok') return <div>Not found: {netexId}</div>;`,
       '',
       `  return (`,
       `    <>`,
       `      <${compName}Presentation`,
-      `        value={value ?? ({} as ${entityName})}`,
+      `        value={{ ...(value ?? ({} as ${entityName})), dataOwnerRef }}`,
       `        onChange={setValue}`,
       `        mode={mode}`,
       `        layout={layout}`,
@@ -101,6 +115,20 @@ const main = (): void => {
       `}`,
       '',
     ].join('\n');
+};
+
+const main = (): void => {
+  const manifest: ManifestEntry[] = JSON.parse(readFileSync(resolve(MANIFEST), 'utf8'));
+  mkdirSync(resolve(OUT_DIR), { recursive: true });
+
+  const exports: string[] = [];
+
+  for (const entry of manifest) {
+    const entityName = entry.entity;
+    const fileName = toCamel(entityName);
+    const compName = `${entityName}Form`;
+
+    const src = renderWrapperSource(entry);
 
     const outPath = resolve(OUT_DIR, `${fileName}.tsx`);
     writeFileSync(outPath, src);

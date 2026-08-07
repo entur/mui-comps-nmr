@@ -16,6 +16,10 @@ import { vehicleSeed, vehicleTypeSeed } from "./initDataSets";
 /** The URL to hand a form as its `endpoint`; only these calls are mocked. */
 export const MOCK_ENDPOINT = "https://mock.local/graphql";
 
+/** Tenant discriminator the stories' `SobekProvider` supplies. The mock
+ *  ignores filters, so any realistic value works. */
+export const MOCK_OWNER_REF = "NOG:Authority:mock-owner";
+
 /** Marker so the patch is installed at most once per session. */
 const PATCHED = Symbol.for("mui-comps-nmr.mockFetch");
 

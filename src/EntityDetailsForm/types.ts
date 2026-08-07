@@ -44,6 +44,13 @@ export interface FieldSpec {
    *  model: rendered locked for viewing only, never merged into the write
    *  payload — not round-tripped. Stale after save (client refetches). */
   serverManaged?: boolean;
+  /** Client-supplied but not user-editable. Rendered and always disabled (even in
+   *  edit mode). Never sourced from form state into the write payload — the host
+   *  supplies the value at the wire edge instead (`dataOwnerRef` is stamped from
+   *  `SobekProvider`), so an edited entity can't rewrite it. Distinct from
+   *  `serverManaged`, which means backend-owned and is *derived* by distill from
+   *  the Entity/Input diff — `locked` is assigned explicitly. */
+  locked?: boolean;
 }
 
 /** One field's placement within a section. `K` is the entity's flat field-key

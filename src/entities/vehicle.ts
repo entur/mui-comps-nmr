@@ -26,7 +26,7 @@ export const FIELDS = {
   changedBy: { kind: 'text', path: ['changedBy'], serverManaged: true },
   chassisNumber: { kind: 'text', path: ['chassisNumber'] },
   created: { kind: 'datetime', path: ['created'], serverManaged: true },
-  dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'] },
+  dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'], locked: true },
   description: { kind: 'name', path: ['description'] },
   name: { kind: 'name', path: ['name'] },
   netexId: { kind: 'text', path: ['netexId'] },

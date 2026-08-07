@@ -22,6 +22,7 @@ const vehicleFields: Record<string, FieldSpec> = {
   version: { kind: 'text', path: ['version'], serverManaged: true },
   created: { kind: 'datetime', path: ['created'], serverManaged: true },
   changedBy: { kind: 'text', path: ['changedBy'], serverManaged: true },
+  operatorRef: { kind: 'text', path: ['operatorRef'], locked: true },
 };
 
 describe('toInputEntity', () => {
@@ -49,6 +50,17 @@ describe('toInputEntity', () => {
     expect(input).not.toHaveProperty('version');
     expect(input).not.toHaveProperty('created');
     expect(input).not.toHaveProperty('changedBy');
+    expect(input.netexId).toBe('VEH:1');
+  });
+
+  it('skips locked fields (value present on entity, not in payload)', () => {
+    const entity = {
+      netexId: 'VEH:1',
+      dataOwnerRef: 'ENT:1',
+      operatorRef: 'ENT:Operator:1',
+    };
+    const input = toInputEntity(entity, vehicleFields);
+    expect(input).not.toHaveProperty('operatorRef');
     expect(input.netexId).toBe('VEH:1');
   });
 

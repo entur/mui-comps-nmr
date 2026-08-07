@@ -1,5 +1,7 @@
 import type { Preview } from "@storybook/react-vite";
 import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
+import { SobekProvider } from "../src/context/SobekContext";
+import { MOCK_ENDPOINT, MOCK_OWNER_REF } from "../src/stories/mockEndpoint";
 
 /**
  * Storybook-only MUI theme. Consumers supply their own theme in production —
@@ -40,6 +42,14 @@ const preview: Preview = {
     },
   },
   decorators: [
+    // Mandatory session inputs for every data-aware component (issue #8).
+    (Story) => (
+      <SobekProvider
+        value={{ endpoint: MOCK_ENDPOINT, dataOwnerRef: MOCK_OWNER_REF }}
+      >
+        <Story />
+      </SobekProvider>
+    ),
     (Story) => (
       <ThemeProvider theme={theme}>
         <CssBaseline />

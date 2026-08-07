@@ -19,31 +19,37 @@ with [Storybook](https://storybook.js.org).
 These generated components load an entity from sobek, render a schema-driven
 form, and save edits back. They are the public form API.
 
+Session inputs (endpoint, headers, tenant) are **not** props — they come from a
+mandatory `SobekProvider` above the form; see [Session context](#session-context).
+
 ```tsx
-import { VehicleForm, type VehicleLayout } from '@entur/mui-comps-nmr';
+import { SobekProvider, VehicleForm, type VehicleLayout } from '@entur/mui-comps-nmr';
 
 const layout: VehicleLayout = {
   Edit: ['name', 'registrationNumber', 'operationalNumber'],
   Dates: ['buildDate', 'registrationDate'],
 };
 
-<VehicleForm
-  endpoint="https://api.entur.io/sobek/graphql"
-  headers={{ 'Client-Name': 'hathor' }}
-  getHeaders={() => ({ Authorization: `Bearer ${token}` })}
-  netexId="VEH:Vehicle:701"
-  mode="edit"
-  layout={layout}
-  onSaved={(id) => router.push(`/vehicles/${id}`)}
-  onError={(msgs) => toast.error(msgs.join(', '))}
-/>
+<SobekProvider
+  value={{
+    endpoint: 'https://api.entur.io/sobek/graphql',
+    headers: { 'Client-Name': 'hathor' },
+    getHeaders: () => ({ Authorization: `Bearer ${token}` }),
+    dataOwnerRef: 'NOG:Authority:cP4aPiJ7c39',
+  }}
+>
+  <VehicleForm
+    netexId="VEH:Vehicle:701"
+    mode="edit"
+    layout={layout}
+    onSaved={(id) => router.push(`/vehicles/${id}`)}
+    onError={(msgs) => toast.error(msgs.join(', '))}
+  />
+</SobekProvider>
 ```
 
 | Prop | Type | Notes |
 | --- | --- | --- |
-| `endpoint` | `string` | sobek GraphQL endpoint URL. |
-| `headers?` | `Record<string, string>` | Static headers sent with every request. |
-| `getHeaders?` | `() => Record<string, string> \| Promise<...>` | Dynamic headers (e.g. OIDC tokens). Called once per request, so a refreshed token is always picked up. Safe to pass as an inline literal — identity churn never re-triggers a load. |
 | `netexId?` | `string` | Entity to load. Omit for create mode. Changing it from set → `undefined` **keeps** the current value (in-progress edits survive) and discards any in-flight load — it does not blank the form. |
 | `mode?` | `'view' \| 'edit'` | Default `'edit'`. |
 | `layout?` | `Layout<EntityField>` | Whitelist of sections (see below). Omitted → flat, all fields. |
@@ -51,6 +57,27 @@ const layout: VehicleLayout = {
 | `slotProps?` | `ControlSlotProps` | Per-kind MUI overrides (TextField, Switch, DataGrid, Tabs). |
 | `onSaved?` | `(netexId: string) => void` | Called after successful save + refetch. |
 | `onError?` | `(generalErrors: string[]) => void` | Called with non-field GraphQL / network errors. |
+
+While an entity is loading the component renders `Loading...`; a settled load
+that returned no rows renders `Not found: <netexId>`, and a *failed* load
+renders the load error — the three states are distinct, so a network failure is
+never reported as a missing record.
+
+#### Session context
+
+`SobekProvider` is **mandatory** for the data-aware forms: rendering one without
+a provider above it throws. It is the single source of truth for the session —
+these were previously per-form props.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `endpoint` | `string` | sobek GraphQL endpoint URL. |
+| `headers?` | `Record<string, string>` | Static headers sent with every request. |
+| `getHeaders?` | `() => Record<string, string> \| Promise<...>` | Dynamic headers (e.g. OIDC tokens). Called once per request, so a refreshed token is always picked up. Safe to pass as an inline literal — identity churn never re-triggers a load. |
+| `dataOwnerRef` | `string` | Tenant discriminator (e.g. `NOG:Authority:cP4aPiJ7c39`). Filters every load and the post-save refetch, and is stamped onto the write payload at the wire edge — never taken from form state, so an entity loaded under one org can't be written back under another. Unlike the headers, changing it **does** re-fire every mounted load. |
+
+`dataOwnerRef` is rendered as a `locked` field: visible, always disabled (even
+in `edit` mode), and never editable by the user.
 
 #### Layout contract
 

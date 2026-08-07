@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type FC } from "react";
+import { useMemo, useState, type FC } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   Alert,
@@ -25,7 +25,7 @@ import {
 } from "../index";
 import { vehicleSeed, vehicleTypeSeed } from "./initDataSets";
 import { vehicleLayout, vehicleTypeLayout } from "./initLayouts";
-import { MOCK_ENDPOINT, installStoriesMock } from "./mockEndpoint";
+import { installStoriesMock } from "./mockEndpoint";
 
 /*
  * Data-aware counterpart to the Dumb-Forms stories: mounts the real,
@@ -41,7 +41,6 @@ import { MOCK_ENDPOINT, installStoriesMock } from "./mockEndpoint";
 // Serve both seeds before any story renders (module scope beats effect ordering).
 installStoriesMock();
 
-const ENDPOINT = MOCK_ENDPOINT;
 const LIST_WIDTH = 260;
 const NEW_KEY = "new";
 
@@ -101,8 +100,6 @@ type Toast = { msg: string; severity: "success" | "error" };
 /** The data-aware form props this page drives — VehicleForm and VehicleTypeForm
  *  share one shape (layout is the base `Layout`, not entity-specific). */
 type DataAwareForm = FC<{
-  endpoint: string;
-  getHeaders?: () => Record<string, string> | Promise<Record<string, string>>;
   netexId?: string;
   mode?: "view" | "edit";
   variant?: LayoutVariant;
@@ -167,13 +164,6 @@ const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
   // Bumping this remounts the form (via `key`) → reload a clean copy = "cancel".
   const [rev, setRev] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
-
-  // Stable across renders (host-guide §2/§3): a fresh function each render would
-  // read as "auth changed" and reload, dropping in-progress edits.
-  const getHeaders = useCallback(
-    async () => ({ Authorization: "Bearer demo-token" }),
-    [],
-  );
 
   const selectRecord = (entity: entity, netexId?: string) => {
     setSelection({ entity, netexId });
@@ -286,8 +276,6 @@ const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
               <Form
                 // New key ⇒ remount: clean entity/record switch + discard on cancel.
                 key={`${selection.entity}:${selection.netexId ?? NEW_KEY}:${rev}`}
-                endpoint={ENDPOINT}
-                getHeaders={getHeaders}
                 netexId={selection.netexId}
                 mode={mode}
                 variant={variant}

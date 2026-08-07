@@ -72,6 +72,23 @@ describe('distillModule', () => {
     expect(out).toMatch(/version:\s*\{ kind: 'text', path: \['version'\], serverManaged: true \}/);
   });
 
+  it('flags LOCKED_FIELDS (on both Entity and Input) as locked, not serverManaged', () => {
+    const withRef = SRC.replace(
+      '  version?: Maybe<Scalars[\'String\'][\'output\']>;',
+      "  version?: Maybe<Scalars['String']['output']>;\n  dataOwnerRef?: Maybe<Scalars['String']['output']>;"
+    ).replace(
+      "export type ThingInput = {",
+      "export type ThingInput = {\n  dataOwnerRef?: Maybe<Scalars['String']['output']>;"
+    );
+    const lockedOut = distillModule(withRef, 'Thing', 'ThingInput');
+    expect(lockedOut).toMatch(
+      /dataOwnerRef:\s*\{ kind: 'text', path: \['dataOwnerRef'\], locked: true \}/
+    );
+    expect(lockedOut).not.toMatch(/dataOwnerRef:\s*\{[^}]*serverManaged/);
+    // Ordinary writable fields are unchanged.
+    expect(lockedOut).toMatch(/length:\s*\{ kind: 'number', path: \['length'\] \}/);
+  });
+
   it('imports referenced types + enum values, never the entity/input itself', () => {
     expect(out).toMatch(/import \{ Mode \} from '\.\.\/generated\/sobekTypes';/);
     expect(out).toMatch(/import type \{[^}]*\} from '\.\.\/generated\/sobekTypes';/);
@@ -121,5 +138,16 @@ describe('distillModule — reference divergence + date kinds', () => {
   it('surfaces a write-reference relation as a `reference` field on the id leaf', () => {
     expect(out).toMatch(/rel:\s*\{ kind: 'reference', path: \['rel', 'netexId'\] \}/);
     expect(out).toMatch(/rel\?: Maybe<Ref>;/); // read relation kept verbatim on Entity
+  });
+
+  it('carries `locked` through the reference fast-path', () => {
+    // The fast-path `continue`s before deriveFields, so it has to apply `locked`
+    // itself — otherwise a LOCKED_FIELDS member that happens to be written as a
+    // reference is emitted editable and lands in the write payload.
+    const lockedRef = SRC_REF.replace(/\brel\b/g, 'dataOwnerRef');
+    const out2 = distillModule(lockedRef, 'Doc', 'DocInput');
+    expect(out2).toMatch(
+      /dataOwnerRef:\s*\{ kind: 'reference', path: \['dataOwnerRef', 'netexId'\], locked: true \}/
+    );
   });
 });

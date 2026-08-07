@@ -1,8 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import type { UseEntityFormProps } from './useEntityForm';
 import { useEntityForm } from './useEntityForm';
 import type { FieldSpec } from '../types';
+import { SobekProvider, type SobekCtx } from '../../context/SobekContext';
 
 const mockFns = vi.hoisted(() => ({
   request: vi.fn(),
@@ -21,6 +23,8 @@ const vehicleDoc = { kind: 'Document' } as any;
 const mutationDoc = { kind: 'Document' } as any;
 
 const ENDPOINT = 'http://test';
+const OWNER_REF = 'NOG:Authority:test';
+const OTHER_REF = 'NOG:Authority:other';
 const TRAM = { netexId: 'VEH:1', name: { value: 'Tram' } };
 const BUS = { netexId: 'VEH:2', name: { value: 'Bus' } };
 
@@ -28,10 +32,21 @@ const fields: Record<string, FieldSpec> = {
   netexId: { kind: 'text', path: ['netexId'] },
   name: { kind: 'name', path: ['name'] },
   version: { kind: 'text', path: ['version'], serverManaged: true },
+  dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'], locked: true },
 };
 
 /** Wraps an entity in the query's `vehicles.content[0]` result envelope. */
 const envelope = (entity: unknown) => ({ vehicles: { content: [entity] } });
+
+/**
+ * The ambient session inputs the hook reads. Tests mutate this between
+ * renders (then `rerender`) to simulate the host re-rendering the provider.
+ */
+let ctx: SobekCtx;
+
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <SobekProvider value={ctx}>{children}</SobekProvider>
+);
 
 /**
  * Builds hook props with the standard Vehicle query/mutation config.
@@ -39,15 +54,16 @@ const envelope = (entity: unknown) => ({ vehicles: { content: [entity] } });
  * Every call mints fresh object literals — matching a host that passes inline
  * props each render, which the hook must tolerate without re-loading.
  *
- * @param {Partial<UseEntityFormProps>} over - per-test overrides (netexId, headers, callbacks…).
+ * @param {Partial<UseEntityFormProps>} over - per-test overrides (netexId, callbacks…).
  * @returns {UseEntityFormProps} props ready for `renderHook`.
  */
 const mkProps = (over: Partial<UseEntityFormProps> = {}): UseEntityFormProps => ({
   fields,
-  endpoint: ENDPOINT,
   query: {
     document: vehicleDoc,
-    variables: (id: string) => ({ filter: { netexIds: [id] } }),
+    variables: (id: string, dataOwnerRef: string) => ({
+      filter: { netexIds: [id], dataOwnerRef },
+    }),
     resultPath: ['vehicles', 'content', 0] as const,
   },
   mutation: {
@@ -58,12 +74,19 @@ const mkProps = (over: Partial<UseEntityFormProps> = {}): UseEntityFormProps => 
 });
 
 const renderForm = (props: UseEntityFormProps) =>
-  renderHook((p: UseEntityFormProps) => useEntityForm(p), { initialProps: props });
+  renderHook((p: UseEntityFormProps) => useEntityForm(p), { initialProps: props, wrapper });
 
 describe('useEntityForm', () => {
   beforeEach(() => {
     mockFns.request.mockReset();
     mockFns.setHeaders.mockReset();
+    ctx = { endpoint: ENDPOINT, dataOwnerRef: OWNER_REF };
+  });
+
+  it('throws when no SobekProvider is above', () => {
+    expect(() => renderHook(() => useEntityForm(mkProps({ netexId: 'VEH:1' })))).toThrow(
+      'mui-comps-nmr: this component must be rendered inside a <SobekProvider>'
+    );
   });
 
   it('loads an entity on mount when netexId is provided', async () => {
@@ -77,7 +100,9 @@ describe('useEntityForm', () => {
 
     expect(result.current.value).toEqual(TRAM);
     expect(result.current.errors).toEqual({});
-    expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, { filter: { netexIds: ['VEH:1'] } });
+    expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, {
+      filter: { netexIds: ['VEH:1'], dataOwnerRef: OWNER_REF },
+    });
   });
 
   it('keeps the loaded value when netexId is removed (create mode preserves edits)', async () => {
@@ -147,21 +172,19 @@ describe('useEntityForm', () => {
 
   it('waits for async getHeaders, then merges dynamic over static headers', async () => {
     let resolveHeaders: (h: Record<string, string>) => void = () => {};
-    const getHeaders = () =>
-      new Promise<Record<string, string>>(resolve => {
-        resolveHeaders = resolve;
-      });
+    ctx = {
+      ...ctx,
+      // `Authorization` here must lose to the dynamic value below.
+      headers: { 'Client-Name': 'hathor', Authorization: 'static-fallback' },
+      getHeaders: () =>
+        new Promise<Record<string, string>>(resolve => {
+          resolveHeaders = resolve;
+        }),
+    };
 
     mockFns.request.mockResolvedValueOnce(envelope(TRAM));
 
-    const { result } = renderForm(
-      mkProps({
-        netexId: 'VEH:1',
-        // `Authorization` here must lose to the dynamic value below.
-        headers: { 'Client-Name': 'hathor', Authorization: 'static-fallback' },
-        getHeaders,
-      })
-    );
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1' }));
 
     // Should not issue the request while dynamic headers are still pending —
     // but the load is already in flight, so the form reports `loading`.
@@ -177,33 +200,61 @@ describe('useEntityForm', () => {
       'Client-Name': 'hathor',
       Authorization: 'Bearer token',
     });
-    expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, { filter: { netexIds: ['VEH:1'] } });
+    expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, {
+      filter: { netexIds: ['VEH:1'], dataOwnerRef: OWNER_REF },
+    });
   });
 
   it('ignores headers/getHeaders identity churn (no reload, edits preserved)', async () => {
     mockFns.request.mockResolvedValue(envelope(TRAM));
 
     // Fresh inline literals every render — exactly what the README recommends.
-    const churnProps = () =>
-      mkProps({
-        netexId: 'VEH:1',
+    const churnCtx = () => {
+      ctx = {
+        endpoint: ENDPOINT,
+        dataOwnerRef: OWNER_REF,
         headers: { 'Client-Name': 'hathor' },
         getHeaders: () => ({ Authorization: 'Bearer token' }),
-      });
+      };
+    };
+    churnCtx();
 
-    const { result, rerender } = renderForm(churnProps());
+    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
 
     await waitFor(() => expect(result.current.value).toEqual(TRAM));
     expect(mockFns.request).toHaveBeenCalledTimes(1);
 
     act(() => result.current.setValue({ netexId: 'VEH:1', name: { value: 'Edited' } } as any));
 
-    rerender(churnProps());
-    rerender(churnProps());
+    churnCtx();
+    rerender(mkProps({ netexId: 'VEH:1' }));
+    churnCtx();
+    rerender(mkProps({ netexId: 'VEH:1' }));
     await new Promise(r => setTimeout(r, 50));
 
     expect(mockFns.request).toHaveBeenCalledTimes(1);
     expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Edited' } });
+  });
+
+  it('re-fires the load when dataOwnerRef changes (org switch)', async () => {
+    mockFns.request
+      .mockResolvedValueOnce(envelope(TRAM))
+      .mockResolvedValueOnce(envelope(BUS));
+
+    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
+
+    await waitFor(() => expect(result.current.value).toEqual(TRAM));
+    expect(mockFns.request).toHaveBeenCalledTimes(1);
+
+    // Host switches organisation — same endpoint, new dataOwnerRef.
+    ctx = { endpoint: ENDPOINT, dataOwnerRef: OTHER_REF };
+    rerender(mkProps({ netexId: 'VEH:1' }));
+
+    await waitFor(() => expect(mockFns.request).toHaveBeenCalledTimes(2));
+    expect(mockFns.request).toHaveBeenNthCalledWith(2, vehicleDoc, {
+      filter: { netexIds: ['VEH:1'], dataOwnerRef: OTHER_REF },
+    });
+    await waitFor(() => expect(result.current.value).toEqual(BUS));
   });
 
   it('ignores a stale response when netexId changes', async () => {
@@ -282,7 +333,7 @@ describe('useEntityForm', () => {
     expect(onError).toHaveBeenCalledWith(['Failed to save']);
   });
 
-  it('saves, returns the id, and refetches', async () => {
+  it('saves, returns the id, and refetches (stamping dataOwnerRef from context)', async () => {
     const updated = { netexId: 'VEH:1', name: { value: 'Tram Updated' } };
 
     mockFns.request
@@ -297,17 +348,22 @@ describe('useEntityForm', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    // Simulate an edit
-    result.current.setValue(updated);
+    // Simulate an edit — including a garbage dataOwnerRef, which must not leak
+    // into the payload: the wire value is stamped from context at the edge.
+    result.current.setValue({ ...updated, dataOwnerRef: 'GARBAGE' } as any);
     await waitFor(() => expect((result.current.value as any)?.name?.value).toBe('Tram Updated'));
 
     await act(async () => result.current.handleSave());
 
     await waitFor(() => expect(result.current.saving).toBe(false));
 
-    expect(mockFns.request).toHaveBeenNthCalledWith(2, mutationDoc, { input: updated });
+    expect(mockFns.request).toHaveBeenNthCalledWith(2, mutationDoc, {
+      input: { ...updated, dataOwnerRef: OWNER_REF },
+    });
+    // Post-save refetch filters on the context dataOwnerRef too — otherwise
+    // the reload returns zero rows and blanks the form after a successful save.
     expect(mockFns.request).toHaveBeenNthCalledWith(3, vehicleDoc, {
-      filter: { netexIds: ['VEH:1'] },
+      filter: { netexIds: ['VEH:1'], dataOwnerRef: OWNER_REF },
     });
     expect(result.current.value).toEqual(updated);
     expect(onSaved).toHaveBeenCalledWith('VEH:1');
