@@ -10,8 +10,17 @@ Status: seed, unpublished. Storybook deploys to GitHub Pages.
 Two layers. **Presentational**: `createAbstractEntityDetailsForm<E>(fields)` →
 typed React form. No data fetch, no save, no i18n runtime, no router.
 **Data-aware**: generated wrappers `VehicleForm` / `VehicleTypeForm` (from
-`scripts/generateWrappers.ts`) wrap it and do load/save over sobek GraphQL via
-the internal `useEntityForm` hook. Public API in `src/index.ts`.
+`scripts/generateWrappers.ts`, one per `entities.manifest.json` entry) wrap it
+and do load/save over sobek GraphQL via the internal `useEntityForm` hook.
+Public API in `src/index.ts`. `src/EntityDetailsForm/formImpls/*` is generator
+output — **never hand-edit**; fix the template in `generateWrappers.ts` and
+re-run it.
+
+`SobekProvider` (`src/context/SobekContext.tsx`) is a typed FC, not the raw
+`Context.Provider`: `value: SobekCtx` is required, so a host threading a
+possibly-undefined session is a compile error rather than a render-time throw
+from inside a consumer. It memoizes per field, so an inline object literal
+doesn't re-render every consumer.
 
 `useEntityForm` contract (not exported; `src/EntityDetailsForm/hooks/`):
 session inputs come from the **mandatory `SobekProvider`** (`endpoint`,
@@ -31,8 +40,8 @@ false on the first commit (`LOAD_START` fires from a passive effect), so
 gating not-found on it flashed `Not found` on every mount. `load === 'ok'`
 + no value renders `Not found: <netexId>`; `load === 'error'` renders
 `errors.__init` instead, so a failed load is never reported as a missing
-record. Save failures with
-no GraphQL `errors` array fall back to `onError(['Failed to save'])`. Stale
+record. Save failures with no GraphQL `errors` array fall back to
+`onError(['Failed to save'])`. Stale
 responses guarded by a reducer `epoch`; `saving` is released on
 unmount-check alone, never gated on that epoch.
 
@@ -86,7 +95,7 @@ per-entity modules.
 - `npm run distill` (chains codegen) — parse generated types → write **committed**
   `src/entities/*`. Each: `Entity` type (verbatim, nested), `FIELDS` registry
   (flat addressable map; value-object leaves hoisted w/ `path`; carries `kind`,
-  `path`, `options`, `serverManaged`).
+  `path`, `options`, `serverManaged`, `locked`).
   `kind` ∈ `text|number|name|switch|enum|enumMulti|grid|reference|date|datetime`.
   `serverManaged` **derived** = on `Entity`, not on `Input` (no client tag).
   `locked` **assigned** = member of distill's `LOCKED_FIELDS` set
@@ -96,7 +105,8 @@ per-entity modules.
   write-reference divergence**: a single relation whose same-named `Input` member
   is a *pure reference* (members ⊆ `{id, netexId}`, e.g. `transportType`/`deckPlan`
   via `*ReferenceInput`) → one `reference` field on the identity leaf (writable,
-  not serverManaged). Other single relations + id-less object arrays (e.g.
+  not serverManaged; the fast-path `continue`s before `deriveFields`, so it must
+  apply `locked` itself). Other single relations + id-less object arrays (e.g.
   `keyValues`) get no `FIELDS` entry but stay on `Entity`. Edits write one leaf by
   `path`, never whole object — so scalar edit can't drop a relation, and edited
   `value` round-trips as complete entity. `src/entities/index.ts` re-exports per
@@ -113,6 +123,39 @@ check, the input half keeps the field out of `serverManaged` (derived = on
 deliberately ahead of live read schema — safe, lib runs no GraphQL ops. When
 sobek ships a field for real, delete matching `extend` lines by hand (done for
 `dataOwnerRef`, now a real read field).
+
+## Tests
+
+Vitest + Testing Library, jsdom. `npm run test` — `pretest` runs `generate`
+(→ `distill` → `codegen`), so the suite always runs against freshly generated
+wrappers and entities. Corollary: a hand-edit under `formImpls/` is silently
+wiped by `npm test`.
+
+**Never write a test per generated entity.** Anything covering generator output
+is driven by `entities.manifest.json`, so a new entity is covered the moment it
+is generated: `formImpls/wrappers.test.tsx` does `describe.each` over the
+manifest and resolves each component from the generated `formImpls/index.ts`
+barrel (`${Entity}Form`) and its registry from the `entities` barrel
+(`${camel}Fields`). Everything entity-shaped is derived — `queryRoot` builds the
+mock response, locked fields come from `FIELDS`, labels from `humanize(key)`. No
+entity literals in the assertions. It throws when a manifest entry has no
+exported wrapper or no registry, so a broken generator run fails loudly rather
+than silently skipping. (`vehicleForm.test.tsx` was the anti-pattern: VehicleType
+shipped untested because nobody wrote the sibling file.)
+
+Two techniques worth keeping:
+
+- **First-commit assertions need `flushSync` on a bare `createRoot`**, not RTL's
+  `render` — `render` wraps in `act()`, which flushes passive effects before it
+  returns and hides anything that only exists on the first commit (this is what
+  masked the `Not found` flash). `flushSync` commits synchronously and leaves
+  passive effects scheduled.
+- **A regression test must be seen failing against the pre-fix code.** The
+  original `Not found` test passed vacuously — its `waitFor` was satisfied by the
+  flash it was meant to forbid. Revert the fix, watch it fail, restore.
+
+`scripts/*.test.ts` test the generator/distiller as string transforms (assert on
+emitted source), so template changes are pinned without running codegen.
 
 ## Build
 
