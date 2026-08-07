@@ -1,5 +1,6 @@
 import { useReducer, useEffect, useMemo, useCallback, useRef } from 'react';
 import { GraphQLClient } from 'graphql-request';
+import { useSobekCtx } from '../../context/SobekContext';
 import type { FieldSpec } from '../types';
 import { toInputEntity } from '../toInput';
 import { normalizeEntityErrors } from '../normalizeErrors';
@@ -13,7 +14,7 @@ export interface EntityFormConfig {
   fields: Record<string, FieldSpec>;
   query: {
     document: TypedDocumentNode<any, any>;
-    variables: (netexId: string) => unknown;
+    variables: (netexId: string, dataOwnerRef: string) => unknown;
     resultPath: readonly (string | number)[];
   };
   mutation: {
@@ -23,9 +24,6 @@ export interface EntityFormConfig {
 }
 
 export interface UseEntityFormProps extends EntityFormConfig {
-  endpoint: string;
-  headers?: Record<string, string>;
-  getHeaders?: () => Record<string, string> | Promise<Record<string, string>>;
   netexId?: string;
   onSaved?: (netexId: string) => void;
   onError?: (generalErrors: string[]) => void;
@@ -104,7 +102,12 @@ const INITIAL_STATE: EntityFormState<any> = {
 // Internal hook — accepts generic E to type the returned entity shape.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function useEntityForm<E>(props: UseEntityFormProps) {
-  const { endpoint, headers, getHeaders, netexId, onSaved, onError } = props;
+  const { netexId, onSaved, onError } = props;
+  // Ambient session inputs from the provider — the hook requires it (the
+  // throw is intended). `dataOwnerRef` joins the load-effect deps below (an
+  // org switch must re-fire every mounted load); `headers`/`getHeaders` stay
+  // ref-guarded so provider re-renders never clobber in-flight edits.
+  const { endpoint, headers, getHeaders, dataOwnerRef } = useSobekCtx();
 
   const client = useMemo(() => new GraphQLClient(endpoint), [endpoint]);
 
@@ -185,7 +188,7 @@ useEffect(() => {
     resolveHeaders()
       .then(authHeaders => {
         client.setHeaders(authHeaders);
-        return client.request(query.document, query.variables(netexId));
+        return client.request(query.document, query.variables(netexId, dataOwnerRef));
       })
       .then((data: any) => {
         if (!mounted.current) return;
@@ -197,7 +200,7 @@ useEffect(() => {
         dispatch({ type: 'LOAD_FAILURE', epoch });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, netexId, resolveHeaders]);
+  }, [client, netexId, resolveHeaders, dataOwnerRef]);
 
   // Save + refetch
   const handleSave = useCallback(async () => {
@@ -210,7 +213,10 @@ useEffect(() => {
     dispatch({ type: 'SAVE_START' });
     try {
       client.setHeaders(await resolveHeaders());
-      const input = toInputEntity(value, fields);
+      // dataOwnerRef is stamped from context at the wire edge, never sourced
+      // from form state — a value loaded under one org must never be written
+      // back under another.
+      const input = { ...toInputEntity(value, fields), dataOwnerRef };
       const data: any = await client.request(mutation.document, { input });
       const returnedId: string = mutation.resultPath.reduce((o: any, k: string | number) => o?.[k], data);
 
@@ -218,7 +224,10 @@ useEffect(() => {
       // another request (load or save) has started in the meantime.
       if (epoch !== epochRef.current || !mounted.current) return;
 
-      const refreshedData: any = await client.request(query.document, query.variables(returnedId));
+      const refreshedData: any = await client.request(
+        query.document,
+        query.variables(returnedId, dataOwnerRef)
+      );
       const refreshed = query.resultPath.reduce((o: any, k: string | number) => o?.[k], refreshedData);
 
       if (mounted.current && epoch === epochRef.current) {
@@ -244,7 +253,7 @@ useEffect(() => {
       // for a single boolean, revisit if concurrent saves become real.)
       if (mounted.current) dispatch({ type: 'SAVE_SETTLED' });
     }
-  }, [value, client, resolveHeaders, onSaved, onError]);
+  }, [value, client, resolveHeaders, dataOwnerRef, onSaved, onError]);
 
   return { value, setValue, loading, saving, errors, handleSave };
 }
