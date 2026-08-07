@@ -46,7 +46,7 @@ export const FIELDS = {
   changed: { kind: 'datetime', path: ['changed'], serverManaged: true },
   changedBy: { kind: 'text', path: ['changedBy'], serverManaged: true },
   created: { kind: 'datetime', path: ['created'], serverManaged: true },
-  dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'] },
+  dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'], locked: true },
   deckPlan: { kind: 'reference', path: ['deckPlan', 'netexId'] },
   description: { kind: 'name', path: ['description'] },
   euroClass: { kind: 'text', path: ['euroClass'] },

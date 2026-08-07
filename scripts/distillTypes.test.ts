@@ -72,6 +72,23 @@ describe('distillModule', () => {
     expect(out).toMatch(/version:\s*\{ kind: 'text', path: \['version'\], serverManaged: true \}/);
   });
 
+  it('flags LOCKED_FIELDS (on both Entity and Input) as locked, not serverManaged', () => {
+    const withRef = SRC.replace(
+      '  version?: Maybe<Scalars[\'String\'][\'output\']>;',
+      "  version?: Maybe<Scalars['String']['output']>;\n  dataOwnerRef?: Maybe<Scalars['String']['output']>;"
+    ).replace(
+      "export type ThingInput = {",
+      "export type ThingInput = {\n  dataOwnerRef?: Maybe<Scalars['String']['output']>;"
+    );
+    const lockedOut = distillModule(withRef, 'Thing', 'ThingInput');
+    expect(lockedOut).toMatch(
+      /dataOwnerRef:\s*\{ kind: 'text', path: \['dataOwnerRef'\], locked: true \}/
+    );
+    expect(lockedOut).not.toMatch(/dataOwnerRef:\s*\{[^}]*serverManaged/);
+    // Ordinary writable fields are unchanged.
+    expect(lockedOut).toMatch(/length:\s*\{ kind: 'number', path: \['length'\] \}/);
+  });
+
   it('imports referenced types + enum values, never the entity/input itself', () => {
     expect(out).toMatch(/import \{ Mode \} from '\.\.\/generated\/sobekTypes';/);
     expect(out).toMatch(/import type \{[^}]*\} from '\.\.\/generated\/sobekTypes';/);
