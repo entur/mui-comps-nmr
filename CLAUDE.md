@@ -14,12 +14,20 @@ typed React form. No data fetch, no save, no i18n runtime, no router.
 the internal `useEntityForm` hook. Public API in `src/index.ts`.
 
 `useEntityForm` contract (not exported; `src/EntityDetailsForm/hooks/`):
-headers resolved **per request** (`headers` + `getHeaders` ref-guarded, dynamic
-wins over static) so inline literals never re-trigger a load. `netexId`
-set → `undefined` keeps `value` and retires the in-flight load; it does not
-blank the form. Save failures with no GraphQL `errors` array fall back to
-`onError(['Failed to save'])`. Stale responses guarded by a `requestIdRef`
-counter; `saving` is released on unmount-check alone, never gated on that id.
+session inputs come from the **mandatory `SobekProvider`** (`endpoint`,
+`headers`, `getHeaders`, `dataOwnerRef`) — wrappers no longer take them as
+props, and the hook throws when no provider is above. Headers resolved **per
+request** (`headers` + `getHeaders` ref-guarded, dynamic wins over static) so
+inline literals never re-trigger a load; `dataOwnerRef` is the opposite — it
+joins the load-effect deps so an org switch re-fires every mounted load.
+`dataOwnerRef` is stamped onto the mutation input from context at the wire
+edge (never from form state) and filters both the load and the post-save
+refetch. `netexId` set → `undefined` keeps `value` and retires the in-flight
+load; it does not blank the form. A settled zero-row load renders
+`Not found: <netexId>` instead of a blank editable form. Save failures with
+no GraphQL `errors` array fall back to `onError(['Failed to save'])`. Stale
+responses guarded by a reducer `epoch`; `saving` is released on
+unmount-check alone, never gated on that epoch.
 
 - `mode` `'view' | 'edit'` — view disables inputs.
 - `layout?` — whitelist of sections (`{ Section: [fields] }`). Omitted field not
@@ -30,6 +38,14 @@ counter; `saving` is released on unmount-check alone, never gated on that id.
   context. Backend-owned — **not round-tripped**, never in write payload, don't
   travel back as edits. (vs ordinary omitted field, whose value *does* pass
   through `onChange`.) Stale after save — client refetches.
+- `locked` fields (`dataOwnerRef`) — client-supplied but not user-editable:
+  rendered and always disabled even in edit, never in the write payload,
+  errors on them route to `generalErrors`. Distinct from `serverManaged`:
+  that means backend-owned and is *derived* by distill from the Entity/Input
+  diff; `locked` is assigned explicitly via distill's `LOCKED_FIELDS` set.
+  In create mode the wrapper renders the context value via a display-only
+  fallback (`value ?? ({ dataOwnerRef } as Entity)`) — it never reaches the
+  server from form state.
 - Labels default to humanized key. Override per-field `{ field, label }`. No i18n
   dep — localization is client's job.
 - `grid` fields render array-of-obj relations as a read-only table; cols
@@ -61,6 +77,8 @@ per-entity modules.
   `path`, `options`, `serverManaged`).
   `kind` ∈ `text|number|name|switch|enum|enumMulti|grid|reference|date|datetime`.
   `serverManaged` **derived** = on `Entity`, not on `Input` (no client tag).
+  `locked` **assigned** = member of distill's `LOCKED_FIELDS` set
+  (`dataOwnerRef`) and not serverManaged (serverManaged wins on overlap).
   Array-of-identity-objects (e.g. `vehicles`) → one `grid` field (read-only
   table, `ObjectGrid`/MUI X Data Grid; always serverManaged). **Read-object /
   write-reference divergence**: a single relation whose same-named `Input` member
