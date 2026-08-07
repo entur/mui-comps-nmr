@@ -78,17 +78,17 @@
 <header class="doc">
   <p class="kicker">Host integration guide · @entur/mui-comps-nmr</p>
   <h1>Dropping <code>VehicleForm</code> into your app</h1>
-  <p class="sub">A practical walkthrough for the app embedding these components: installing the package, wiring auth, and handling <strong>new</strong> / <strong>edit + save</strong> / <strong>cancel</strong>. Everything here is about the props you pass and the callbacks you receive — nothing about how the component works inside.</p>
+  <p class="sub">A practical walkthrough for the app embedding these components: installing the package, wiring the session provider and auth, and handling <strong>new</strong> / <strong>edit + save</strong> / <strong>cancel</strong>. Everything here is about what you pass in and the callbacks you receive — nothing about how the component works inside.</p>
 </header>
 
-<p class="lead">The library gives you <strong>data-aware</strong> form components — <code>VehicleForm</code> and <code>VehicleTypeForm</code>. You hand each one a GraphQL <code>endpoint</code>, a way to authenticate, and (optionally) the id of a record to edit. It loads the record, renders the form, and saves changes back for you. You don't write queries, mutations, or a save handler.</p>
+<p class="lead">The library gives you <strong>data-aware</strong> form components — <code>VehicleForm</code> and <code>VehicleTypeForm</code>. You wrap them in a <code>SobekProvider</code> carrying the GraphQL endpoint, a way to authenticate, and the organisation the data belongs to; each form then takes (optionally) the id of a record to edit. It loads the record, renders the form, and saves changes back for you. You don't write queries, mutations, or a save handler.</p>
 
 <div class="toc">
   <strong>In this guide</strong>
   <ol>
     <li><a href="#install">Installing the package</a></li>
     <li><a href="#import">Import &amp; the shape of a form</a></li>
-    <li><a href="#auth">Authentication — <code>headers</code> vs <code>getHeaders</code></a></li>
+    <li><a href="#auth">Session &amp; auth — the <code>SobekProvider</code></a></li>
     <li><a href="#stability">Reloads — what triggers one</a></li>
     <li><a href="#actions">New, Save, and Cancel</a></li>
     <li><a href="#view">Read-only (view) mode</a></li>
@@ -101,11 +101,11 @@
 
 <div class="callout good"><strong>Install from a GitHub Release.</strong> The repo is public, so the tarball URL needs no token:</div>
 
-<pre><code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.1.0/entur-mui-comps-nmr-0.1.0.tgz</code></pre>
+<pre><code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.2.0/entur-mui-comps-nmr-0.2.0.tgz</code></pre>
 
 <p>Releases are listed at <a href="https://github.com/entur/mui-comps-nmr/releases">github.com/entur/mui-comps-nmr/releases</a>. Each carries one <code>.tgz</code> asset plus a note recording which sobek schema it was built against. The package is <em>not</em> on the npm registry — <code>npm i @entur/mui-comps-nmr</code> returns a 404.</p>
 
-<div class="callout warn"><strong>Upgrading means editing the URL.</strong> A URL install pins that exact URL in your <code>package-lock.json</code>, so <code>^0.1.0</code> ranges don't work and <code>npm outdated</code> will never tell you a new version exists. Watch the Releases page and bump the URL by hand. This is the cost of not being on a registry — the version scheme is already registry-ready, so if that changes, the install command is the only thing that changes.</div>
+<div class="callout warn"><strong>Upgrading means editing the URL.</strong> A URL install pins that exact URL in your <code>package-lock.json</code>, so <code>^0.2.0</code> ranges don't work and <code>npm outdated</code> will never tell you a new version exists. Watch the Releases page and bump the URL by hand. This is the cost of not being on a registry — the version scheme is already registry-ready, so if that changes, the install command is the only thing that changes.</div>
 
 <h3>Peer dependencies</h3>
 <p>All of these are externalized from the build — the host must have them installed, and their major versions are pinned to match hathor. Externalized means the host supplies one shared copy; if these ever resolve to two copies you get invalid-hook-call errors and MUI styles not applying.</p>
@@ -122,23 +122,20 @@
 <div class="callout good"><strong>The GraphQL client is bundled.</strong> <code>graphql-request</code> and the slice of <code>graphql</code> it needs are compiled into <code>dist/</code>, so the host installs no GraphQL packages and the library never touches your Apollo/urql client or its cache.</div>
 
 <h2 id="import"><span class="num">2</span>Import &amp; the shape of a form</h2>
-<p>Both components are named exports. They render the fields plus — in edit mode — their own <strong>Save</strong> button. You place the component wherever you want the form to appear.</p>
-<pre><code>import { VehicleForm, VehicleTypeForm } from '@entur/mui-comps-nmr';
+<p>Both components are named exports. They render the fields plus — in edit mode — their own <strong>Save</strong> button. You place the component wherever you want the form to appear, anywhere below a <code>SobekProvider</code>.</p>
+<pre><code>import { SobekProvider, VehicleForm, VehicleTypeForm } from '@entur/mui-comps-nmr';
 
-&lt;VehicleForm
-  endpoint="https://sobek.example/graphql"
-  getHeaders={authHeaders}
-  netexId="VEH:Vehicle:123"
-/&gt;</code></pre>
+&lt;SobekProvider value={{ endpoint, getHeaders: authHeaders, dataOwnerRef }}&gt;
+  &lt;VehicleForm netexId="VEH:Vehicle:123" /&gt;
+&lt;/SobekProvider&gt;</code></pre>
+
+<div class="callout warn"><strong>Session inputs are not props.</strong> <code>endpoint</code>, <code>headers</code>, <code>getHeaders</code> and <code>dataOwnerRef</code> live on the provider (§3), not on the form. Passing them to <code>&lt;VehicleForm&gt;</code> is a type error, and rendering a form with no provider above it throws.</div>
 
 <h3>Props you'll use</h3>
 <table>
   <thead><tr><th>Prop</th><th>Type</th><th>What it's for</th></tr></thead>
   <tbody>
-    <tr><td><code>endpoint</code> <span class="req">required</span></td><td><code>string</code></td><td>The GraphQL URL to load from and save to.</td></tr>
     <tr><td><code>netexId</code></td><td><code>string</code></td><td>The record to load and edit. <strong>Omit it at mount to start a blank “new” form</strong> (§5).</td></tr>
-    <tr><td><code>headers</code></td><td><code>Record&lt;string,string&gt;</code></td><td>Static request headers (fixed API keys, tenant ids…).</td></tr>
-    <tr><td><code>getHeaders</code></td><td><code>() =&gt; headers \| Promise&lt;headers&gt;</code></td><td>Headers computed at request time — use this for auth tokens (see §3).</td></tr>
     <tr><td><code>mode</code></td><td><code>'view' \| 'edit'</code></td><td>Default <code>'edit'</code>. <code>'view'</code> disables every input and hides Save.</td></tr>
     <tr><td><code>onSaved</code></td><td><code>(netexId) =&gt; void</code></td><td>Called after a save succeeds; receives the saved record's id.</td></tr>
     <tr><td><code>onError</code></td><td><code>(msgs: string[]) =&gt; void</code></td><td>Called with general (non-field) error messages when a save fails.</td></tr>
@@ -146,42 +143,62 @@
   </tbody>
 </table>
 <div class="callout"><strong>Field-level errors are handled for you.</strong> When a save fails validation, the offending inputs show their messages inline automatically. <code>onError</code> only receives the <em>general</em> messages that don't belong to a single field, so you can show a banner or toast. If a save fails with no usable GraphQL error payload (network drop, malformed response), you still get one message: <code>['Failed to save']</code>.</div>
-<div class="callout warn"><strong><code>onError</code> is save-only, and loads currently fail quietly.</strong> While the initial load is in flight the component renders a bare <code>Loading...</code> placeholder; if that load fails, nothing calls <code>onError</code> and no message reaches the UI — you get an empty form. If a failed load must be visible in your app, verify the record exists before mounting the form, or wrap it in your own error boundary/state.</div>
+<div class="callout"><strong>The three load outcomes are distinct, and the component renders each itself.</strong> While the load is in flight you get a bare <code>Loading...</code> placeholder. A load that settles with <em>no matching record</em> renders <code>Not found: &lt;netexId&gt;</code> — never a blank editable form, since saving one of those would create a new record instead of editing the one you asked for. A load that <em>fails</em> (network drop, auth rejection, server error) renders the load error instead, so a transport failure is never reported to your user as a missing record.</div>
+<div class="callout warn"><strong><code>onError</code> is still save-only.</strong> A failed load is shown in place of the form, but nothing calls <code>onError</code> for it — if your app needs to react to a failed load (retry button, redirect, logging), detect it yourself rather than waiting on a callback.</div>
 
-<h2 id="auth"><span class="num">3</span>Authentication</h2>
-<p>You have two ways to attach credentials. Pick based on whether the value is fixed or has to be fetched fresh each time.</p>
+<h2 id="auth"><span class="num">3</span>Session &amp; auth — the <code>SobekProvider</code></h2>
+<p>One provider, mounted once near the top of your app, supplies every form below it with the endpoint, the credentials, and the organisation whose data you're working on. It is <strong>mandatory</strong>: a data-aware form with no provider above it throws with <code>mui-comps-nmr: this component must be rendered inside a &lt;SobekProvider&gt;</code>.</p>
 
-<h3><code>headers</code> — fixed values</h3>
-<p>A plain object, sent as-is on every request. Good for things that never change during the session. An inline object literal is fine — see §4:</p>
-<pre><code>&lt;VehicleForm endpoint={endpoint} headers={{ 'X-Tenant': 'entur' }} /&gt;</code></pre>
+<pre><code>import { SobekProvider } from '@entur/mui-comps-nmr';
 
-<h3><code>getHeaders</code> — tokens &amp; anything async</h3>
-<p>A function the component calls to obtain headers right before it needs them. It may return the object directly, or a <code>Promise</code> — so it fits token providers that refresh in the background. This is the right home for an <code>Authorization</code> header.</p>
-<pre><code>// e.g. with react-oidc-context or your own auth hook
-const auth = useAuth();
+&lt;SobekProvider
+  value={{
+    endpoint: 'https://sobek.example/graphql',
+    headers: { 'X-Tenant': 'entur' },
+    getHeaders: async () =&gt; ({
+      Authorization: `Bearer ${await auth.getAccessToken()}`,
+    }),
+    dataOwnerRef: 'NOG:Authority:cP4aPiJ7c39',
+  }}
+&gt;
+  {/* …anything, at any depth… */}
+&lt;/SobekProvider&gt;</code></pre>
 
-&lt;VehicleForm
-  endpoint={endpoint}
-  getHeaders={async () =&gt; ({
-    Authorization: `Bearer ${await auth.getAccessToken()}`,
-  })}
-  netexId={id}
-/&gt;</code></pre>
-<div class="callout good"><strong>You can use both.</strong> When you pass <code>headers</code> and <code>getHeaders</code> together, they're combined — <code>getHeaders</code> wins on any key it also sets. So put constants in <code>headers</code> and the token in <code>getHeaders</code>.</div>
-
-<h2 id="stability"><span class="num">4</span>Reloads — what triggers one</h2>
-<p>A reload replaces whatever the user was editing with freshly-loaded server values, so it matters which props can cause one. The list is short:</p>
 <table>
-  <thead><tr><th>Prop changes</th><th>Effect</th></tr></thead>
+  <thead><tr><th>Field</th><th>Type</th><th>What it's for</th></tr></thead>
   <tbody>
-    <tr><td><code>netexId</code></td><td>Reloads that record (or, if it becomes <code>undefined</code>, retires the in-flight load — see §5).</td></tr>
-    <tr><td><code>endpoint</code></td><td>New client, reloads.</td></tr>
-    <tr><td><code>headers</code> / <code>getHeaders</code></td><td><strong>Nothing.</strong> They're read fresh on every request, not watched.</td></tr>
+    <tr><td><code>endpoint</code> <span class="req">required</span></td><td><code>string</code></td><td>The GraphQL URL to load from and save to.</td></tr>
+    <tr><td><code>dataOwnerRef</code> <span class="req">required</span></td><td><code>string</code></td><td>The organisation owning the data, e.g. <code>NOG:Authority:cP4aPiJ7c39</code>. Filters every load and stamps every save (see below).</td></tr>
+    <tr><td><code>headers</code></td><td><code>Record&lt;string,string&gt;</code></td><td>Static request headers (fixed API keys, client names…). Sent as-is on every request.</td></tr>
+    <tr><td><code>getHeaders</code></td><td><code>() =&gt; headers \| Promise&lt;headers&gt;</code></td><td>Headers computed at request time — the right home for an <code>Authorization</code> token. May be async, so it fits token providers that refresh in the background.</td></tr>
   </tbody>
 </table>
-<div class="callout good"><strong>Inline <code>headers</code>/<code>getHeaders</code> literals are safe.</strong> The component reads them per request rather than treating their identity as a dependency, so a new object or closure on every render costs nothing — no re-authentication, no reload, no lost edits. You do not need <code>useCallback</code>, <code>useMemo</code>, or module-scope constants here.</div>
-<p>Because <code>getHeaders</code> is called immediately before each request, a token that refreshes in the background is always picked up — no prop change needed.</p>
-<div class="callout warn"><strong>The flip side: changing auth won't reload the record.</strong> Since these props aren't watched, swapping tenant or credentials mid-session leaves the currently-loaded record on screen; only the <em>next</em> request uses the new headers. If a header change should mean “different data,” force it yourself with a <code>key</code> bump (§5).</div>
+
+<div class="callout good"><strong>You can use both header fields.</strong> When <code>headers</code> and <code>getHeaders</code> are both set they're combined — <code>getHeaders</code> wins on any key it also sets. So put constants in <code>headers</code> and the token in <code>getHeaders</code>. Because <code>getHeaders</code> is called immediately before each request, a token that refreshes in the background is always picked up, with no re-render needed.</div>
+
+<h3><code>dataOwnerRef</code> — the organisation</h3>
+<p>This is the tenant discriminator, and it is handled differently from the headers on purpose:</p>
+<ul class="tight">
+  <li>It <strong>filters</strong> the load and the post-save refetch, so a form only ever shows records belonging to that organisation.</li>
+  <li>It is <strong>stamped onto every save from the provider</strong>, never taken from what's on screen — a record loaded under one organisation can't be written back under another.</li>
+  <li>It renders as a <strong>locked field</strong>: visible in the form, always disabled, even in <code>edit</code> mode. Your user sees which organisation they're working in and cannot change it.</li>
+  <li>Unlike the headers, <strong>changing it reloads</strong> every mounted form (§4).</li>
+</ul>
+<div class="callout"><strong>Switching organisation is a real state change.</strong> Point the provider at a new <code>dataOwnerRef</code> and every mounted form re-loads against it. If a user has unsaved edits when that happens, they are replaced by freshly-loaded values — prompt before switching if that matters in your app.</div>
+
+<h2 id="stability"><span class="num">4</span>Reloads — what triggers one</h2>
+<p>A reload replaces whatever the user was editing with freshly-loaded server values, so it matters what can cause one. The list is short:</p>
+<table>
+  <thead><tr><th>What changes</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><code>netexId</code> prop</td><td>Reloads that record (or, if it becomes <code>undefined</code>, retires the in-flight load — see §5).</td></tr>
+    <tr><td><code>endpoint</code> on the provider</td><td>New client, reloads.</td></tr>
+    <tr><td><code>dataOwnerRef</code> on the provider</td><td><strong>Reloads every mounted form</strong> — an organisation switch means different data.</td></tr>
+    <tr><td><code>headers</code> / <code>getHeaders</code> on the provider</td><td><strong>Nothing.</strong> They're read fresh on every request, not watched.</td></tr>
+  </tbody>
+</table>
+<div class="callout good"><strong>Inline <code>headers</code>/<code>getHeaders</code> literals are safe.</strong> They're read per request rather than treated as dependencies, so a new object or closure on every render costs nothing — no re-authentication, no reload, no lost edits. You do not need <code>useCallback</code>, <code>useMemo</code>, or module-scope constants for them, and an inline <code>value={{ … }}</code> on the provider is fine too: it memoizes per field.</div>
+<div class="callout warn"><strong>The flip side: changing credentials alone won't reload the record.</strong> Since the header fields aren't watched, swapping tokens mid-session leaves the currently-loaded record on screen; only the <em>next</em> request uses the new headers. If a credential change should mean “different data,” either change <code>dataOwnerRef</code> with it or force a reload with a <code>key</code> bump (§5).</div>
 
 <h2 id="actions"><span class="num">5</span>New, Save, and Cancel</h2>
 <p>These three host actions map onto the interface as follows. Note that <strong>Save is built in</strong> — you don't render or trigger it; you react to its result.</p>
@@ -205,22 +222,17 @@ const auth = useAuth();
 </div>
 
 <h3>New</h3>
-<pre><code>// blank form → create a Vehicle
-&lt;VehicleForm endpoint={endpoint} getHeaders={getHeaders} mode="edit" /&gt;
+<pre><code>// blank form → create a Vehicle (inside your SobekProvider)
+&lt;VehicleForm mode="edit" /&gt;
 
 // tell the host when it's been created
-&lt;VehicleForm
-  endpoint={endpoint}
-  getHeaders={getHeaders}
-  onSaved={(newId) =&gt; navigate(`/vehicles/${newId}`)}
-/&gt;</code></pre>
+&lt;VehicleForm onSaved={(newId) =&gt; navigate(`/vehicles/${newId}`)} /&gt;</code></pre>
+<div class="callout"><strong>The organisation is filled in for you.</strong> A create form shows <code>dataOwnerRef</code> already set from the provider, locked — the user neither picks it nor can change it, and the same value is what gets saved.</div>
 <div class="callout warn"><strong>Clearing <code>netexId</code> on a mounted form does not blank it.</strong> Going from an id to <code>undefined</code> only abandons the in-flight load — the values already on screen stay, deliberately, so an edit in progress is never wiped. To actually get an empty create form from a form that was showing a record, remount it: <code>key={netexId ?? 'new'}</code>.</div>
 
 <h3>Save</h3>
 <p>You don't call save. The user clicks the built-in button; you respond to the outcome:</p>
 <pre><code>&lt;VehicleForm
-  endpoint={endpoint}
-  getHeaders={getHeaders}
   netexId={id}
   onSaved={(id) =&gt; {
     toast.success('Saved');
@@ -239,8 +251,6 @@ const auth = useAuth();
     &lt;&gt;
       &lt;VehicleForm
         key={`${id}:${rev}`}      {/* new key ⇒ reload clean */}
-        endpoint={endpoint}
-        getHeaders={getHeaders}
         netexId={id}
         onSaved={() =&gt; toast.success('Saved')}
       /&gt;
@@ -252,19 +262,18 @@ const auth = useAuth();
 
 <h2 id="view"><span class="num">6</span>Read-only (view) mode</h2>
 <p>Pass <code>mode="view"</code> to show the same fields with every input disabled and no Save button — useful for a details pane or a permission-gated screen.</p>
-<pre><code>&lt;VehicleForm endpoint={endpoint} getHeaders={getHeaders}
-             netexId={id} mode="view" /&gt;</code></pre>
+<pre><code>&lt;VehicleForm netexId={id} mode="view" /&gt;</code></pre>
 <p>Flip <code>mode</code> between <code>'view'</code> and <code>'edit'</code> to toggle an edit affordance in your own toolbar.</p>
 
 <h2 id="full"><span class="num">7</span>A complete host page</h2>
-<p>List on the left, form on the right. Auth from your app's hook, <code>key</code> for clean switching, view↔edit toggle, and a cancel that discards.</p>
+<p>List on the left, form on the right. Session from the provider, auth from your app's hook, <code>key</code> for clean switching, view↔edit toggle, and a cancel that discards.</p>
 <pre><code>import { useState } from 'react';
-import { VehicleForm } from '@entur/mui-comps-nmr';
+import { SobekProvider, VehicleForm } from '@entur/mui-comps-nmr';
 import { useAuth } from './auth';
 
 const ENDPOINT = 'https://sobek.example/graphql';
 
-export function VehiclesPage({ vehicles, refetchList }) {
+export function VehiclesPage({ vehicles, refetchList, dataOwnerRef }) {
   const auth = useAuth();
   const [selected, setSelected] = useState&lt;string | undefined&gt;();
   const [mode, setMode] = useState&lt;'view' | 'edit'&gt;('view');
@@ -278,6 +287,7 @@ export function VehiclesPage({ vehicles, refetchList }) {
   const discard = () =&gt; setRev(r =&gt; r + 1);
 
   return (
+    &lt;SobekProvider value={{ endpoint: ENDPOINT, getHeaders, dataOwnerRef }}&gt;
     &lt;div style={{ display: 'flex', gap: 24 }}&gt;
       &lt;nav&gt;
         &lt;button onClick={() =&gt; { setSelected(undefined); setMode('edit'); }}&gt;
@@ -299,8 +309,6 @@ export function VehiclesPage({ vehicles, refetchList }) {
 
         &lt;VehicleForm
           key={`${selected ?? 'new'}:${rev}`}   {/* clean switch + discard */}
-          endpoint={ENDPOINT}
-          getHeaders={getHeaders}
           netexId={selected}                    {/* undefined ⇒ new */}
           mode={mode}
           onSaved={(id) =&gt; {
@@ -312,26 +320,29 @@ export function VehiclesPage({ vehicles, refetchList }) {
         /&gt;
       &lt;/section&gt;
     &lt;/div&gt;
+    &lt;/SobekProvider&gt;
   );
 }</code></pre>
+<div class="callout good"><strong>Mount the provider once, high up.</strong> It is shown inside the page here to keep the example self-contained, but in a real app it belongs above your router — one provider for the whole session, so every form anywhere in the tree is covered and an organisation switch propagates in one place.</div>
 
 <h2 id="checklist"><span class="num">8</span>Checklist</h2>
 <ul class="tight">
-  <li><span class="pill">install</span> <code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.1.0/entur-mui-comps-nmr-0.1.0.tgz</code> — no token. Upgrades are manual URL edits. Host supplies React 19 / MUI 7 / x-data-grid 8 / Emotion 11.</li>
-  <li><span class="pill">endpoint</span> Always required — your GraphQL URL.</li>
+  <li><span class="pill">install</span> <code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.2.0/entur-mui-comps-nmr-0.2.0.tgz</code> — no token. Upgrades are manual URL edits. Host supplies React 19 / MUI 7 / x-data-grid 8 / Emotion 11.</li>
+  <li><span class="pill">provider</span> <code>SobekProvider</code> is mandatory and carries the whole session — <code>endpoint</code>, <code>dataOwnerRef</code>, <code>headers</code>, <code>getHeaders</code>. None of them are form props any more; a form with no provider above it throws.</li>
   <li><span class="pill">auth</span> Token → <code>getHeaders</code> (may be async); constants → <code>headers</code>. Both allowed.</li>
-  <li><span class="pill">stable</span> No memoization needed — inline <code>headers</code>/<code>getHeaders</code> literals are safe; they're read per request, not watched. Only <code>netexId</code> and <code>endpoint</code> trigger a reload.</li>
-  <li><span class="pill">new</span> Mount without <code>netexId</code> for a blank create form; get the new id from <code>onSaved</code>. Clearing <code>netexId</code> on a live form keeps its values — remount to blank it.</li>
+  <li><span class="pill">org</span> <code>dataOwnerRef</code> filters loads, is stamped onto every save from the provider, and renders as a locked field the user can't edit.</li>
+  <li><span class="pill">stable</span> No memoization needed — inline <code>headers</code>/<code>getHeaders</code> and an inline provider <code>value</code> are all safe. Reloads come from <code>netexId</code>, <code>endpoint</code>, and <code>dataOwnerRef</code> only.</li>
+  <li><span class="pill">new</span> Mount without <code>netexId</code> for a blank create form — <code>dataOwnerRef</code> is pre-filled and locked; get the new id from <code>onSaved</code>. Clearing <code>netexId</code> on a live form keeps its values — remount to blank it.</li>
   <li><span class="pill">save</span> Built in — the component renders its own Save button; you react via <code>onSaved</code> / <code>onError</code>.</li>
   <li><span class="pill">cancel</span> No cancel prop — remount via <code>key</code> to discard edits and reload.</li>
   <li><span class="pill">key</span> Set <code>key={netexId ?? 'new'}</code> so switching records always starts clean.</li>
   <li><span class="pill">refresh</span> After <code>onSaved</code>, refetch any list/header copies of the record you keep.</li>
   <li><span class="pill">view</span> <code>mode="view"</code> disables inputs and hides Save.</li>
-  <li><span class="pill">load</span> <code>onError</code> covers saves only — a failed <em>load</em> is silent. Handle it yourself if it matters.</li>
+  <li><span class="pill">load</span> Three distinct outcomes, all rendered for you: <code>Loading...</code>, <code>Not found: &lt;netexId&gt;</code> for a settled empty load, and the load error for a failed one. <code>onError</code> still fires for saves only.</li>
 </ul>
 
 <footer class="doc">
-  Host integration guide for <code>VehicleForm</code> / <code>VehicleTypeForm</code> as exported today from <code>@entur/mui-comps-nmr</code>. Presentation props (<code>layout</code>, <code>variant</code>, <code>slotProps</code>) are documented separately in the README.
+  Host integration guide for <code>SobekProvider</code> + <code>VehicleForm</code> / <code>VehicleTypeForm</code> as exported from <code>@entur/mui-comps-nmr</code> v0.2.0. Presentation props (<code>layout</code>, <code>variant</code>, <code>slotProps</code>) are documented separately in the README.
 </footer>
 
 </div>
