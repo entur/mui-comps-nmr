@@ -15,7 +15,7 @@ export function toInputEntity<E>(
   let input: Record<string, unknown> = {};
 
   for (const [, spec] of Object.entries(fields)) {
-    if (spec.serverManaged) continue;
+    if (spec.serverManaged || spec.locked) continue;
 
     if (spec.kind === 'reference') {
       const parentPath = spec.path.slice(0, -1);

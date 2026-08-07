@@ -14,7 +14,7 @@ export function normalizeEntityErrors(
     const inputPath = idx >= 0 ? path.slice(idx + 1).filter((p): p is string => typeof p === 'string') : [];
 
     const fieldKey = Object.entries(fields).find(([, spec]) => {
-      if (spec.serverManaged) return false;
+      if (spec.serverManaged || spec.locked) return false;
       return spec.path.join('.') === inputPath.join('.');
     })?.[0];
 

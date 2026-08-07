@@ -7,6 +7,7 @@ const fields: Record<string, FieldSpec> = {
   name: { kind: 'name', path: ['name'] },
   registrationNumber: { kind: 'text', path: ['registrationNumber'] },
   version: { kind: 'text', path: ['version'], serverManaged: true },
+  dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'], locked: true },
 };
 
 describe('normalizeEntityErrors', () => {
@@ -54,6 +55,19 @@ describe('normalizeEntityErrors', () => {
     const { fieldErrors, generalErrors } = normalizeEntityErrors(err, fields);
     expect(Object.keys(fieldErrors)).toHaveLength(0);
     expect(generalErrors).toEqual(['Version mismatch']);
+  });
+
+  it('routes locked-field errors to generalErrors', () => {
+    const err = {
+      response: {
+        errors: [
+          { message: 'Unknown data owner', path: ['createOrUpdateVehicle', 'input', 'dataOwnerRef'] },
+        ],
+      },
+    };
+    const { fieldErrors, generalErrors } = normalizeEntityErrors(err, fields);
+    expect(Object.keys(fieldErrors)).toHaveLength(0);
+    expect(generalErrors).toEqual(['Unknown data owner']);
   });
 
   it('handles multiple errors of both kinds', () => {

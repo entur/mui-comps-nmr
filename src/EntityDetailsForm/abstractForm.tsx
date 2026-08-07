@@ -97,7 +97,7 @@ export function createAbstractEntityDetailsForm<E>(
         );
       }
 
-      const disabled = disabledProp || mode === 'view' || !!spec.serverManaged;
+      const disabled = disabledProp || mode === 'view' || !!spec.serverManaged || !!spec.locked;
       const control = renderControl({
         spec,
         label,
