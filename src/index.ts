@@ -6,6 +6,8 @@
  * from `generated/` directly.
  */
 export { createAbstractEntityDetailsForm } from './EntityDetailsForm/abstractForm';
+export { SobekProvider, useSobekCtx } from './context/SobekContext';
+export type { SobekCtx } from './context/SobekContext';
 export { VehicleForm, VehicleTypeForm } from './EntityDetailsForm/formImpls';
 export type {
   EntityDetailsFormProps,
