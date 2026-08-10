@@ -117,9 +117,10 @@
     <tr><td><code>@mui/icons-material</code></td><td><code>^7.0.2</code></td><td></td></tr>
     <tr><td><code>@mui/x-data-grid</code></td><td><code>^8.29.1</code></td><td>Loaded lazily, only when a <code>grid</code> field renders — but still required.</td></tr>
     <tr><td><code>@emotion/react</code>, <code>@emotion/styled</code></td><td><code>^11.14.0</code></td><td>MUI's styling engine.</td></tr>
+    <tr><td><code>graphql-request</code></td><td><code>^7.4.0</code></td><td>The GraphQL transport used by the data-aware wrappers. Pulls in <code>graphql</code> (its own peer, <code>14 - 16</code>) — npm and yarn install it for you; under pnpm add it yourself.</td></tr>
   </tbody>
 </table>
-<div class="callout good"><strong>The GraphQL client is bundled.</strong> <code>graphql-request</code> and the slice of <code>graphql</code> it needs are compiled into <code>dist/</code>, so the host installs no GraphQL packages and the library never touches your Apollo/urql client or its cache.</div>
+<div class="callout good"><strong>The library never touches your GraphQL client.</strong> <code>graphql-request</code> is a thin <code>fetch</code> wrapper the forms construct per request — it is not Apollo/urql, has no cache, and shares no state with whatever client your app already uses. It is a peer dependency so the host owns the version, and so <code>graphql</code> is resolved once instead of a copy being compiled into <code>dist/</code>.</div>
 
 <h2 id="import"><span class="num">2</span>Import &amp; the shape of a form</h2>
 <p>Both components are named exports. They render the fields plus — in edit mode — their own <strong>Save</strong> button. You place the component wherever you want the form to appear, anywhere below a <code>SobekProvider</code>.</p>

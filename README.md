@@ -265,12 +265,14 @@ Some terms, expanded for anyone new to library packaging:
   of the compiled JavaScript. They give consumers autocomplete and
   type-checking without shipping the TypeScript source. Generated here by
   [`vite-plugin-dts`](https://github.com/qmhc/vite-plugin-dts).
-- **Externalised peer dependencies** — React, MUI, and Emotion are *not* bundled
-  into `dist`. They are declared as **peer dependencies**: the consuming app is
-  expected to already have them, and supplies its single shared copy. Bundling
-  our own copies would bloat the output and, with React especially, cause
-  subtle "two Reacts" bugs (hooks throwing, context not matching). The host
-  app's copy is the only one in play.
+- **Externalised peer dependencies** — React, MUI, Emotion and `graphql-request`
+  are *not* bundled into `dist`. They are declared as **peer dependencies**: the
+  consuming app is expected to already have them, and supplies its single shared
+  copy. Bundling our own copies would bloat the output and, with React
+  especially, cause subtle "two Reacts" bugs (hooks throwing, context not
+  matching). The host app's copy is the only one in play. Externalising
+  `graphql-request` also keeps `graphql` — which this library never imports
+  directly, only reaches through the client — out of the bundle entirely.
 
 The `package.json` `exports` map points each consumption style at the right
 file: `import` → the ES module, `require` → the CommonJS file, `types` → the
@@ -300,4 +302,6 @@ declarations.
 
 React 19, MUI 7, and Emotion 11 are pinned to match
 [hathor](https://github.com/entur/hathor) (the primary consumer). They are peer
-dependencies — the host app owns the actual versions.
+dependencies — the host app owns the actual versions. So is
+`graphql-request` (^7.4.0), the transport the data-aware wrappers use; it brings
+its own `graphql` peer (`14 - 16`), auto-installed by npm/yarn but not by pnpm.

@@ -27,6 +27,11 @@ const EXTERNAL = [
   '@mui/x-data-grid',
   '@emotion/react',
   '@emotion/styled',
+  // The GraphQL transport. `graphql` itself is never imported by this library —
+  // it is only reachable through graphql-request, so externalising the client
+  // keeps the whole graphql runtime out of `dist` as well.
+  'graphql-request',
+  'graphql',
 ];
 
 // True only under `npm run build` — not `storybook` / `build-storybook` / `test`.
