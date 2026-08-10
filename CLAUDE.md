@@ -160,6 +160,9 @@ emitted source), so template changes are pinned without running codegen.
 ## Build
 
 `npm run build` — Vite library mode → `dist/`. Emits ESM (`index.js`), CJS
-(`index.cjs`), types (`index.d.ts` via `vite-plugin-dts`). React/MUI/Emotion are
-externalized peer deps — host owns single copy (avoids "two Reacts"). React 19,
-MUI 7, Emotion 11 pinned to match hathor.
+(`index.cjs`), types (`index.d.ts` via `vite-plugin-dts`). React/MUI/Emotion +
+`graphql-request` are externalized peer deps — host owns single copy (avoids
+"two Reacts"). React 19, MUI 7, Emotion 11 pinned to match hathor.
+`graphql` is never imported directly (only through `graphql-request`), so
+externalizing the client keeps the graphql runtime out of `dist` too — no
+`dependencies` block at all now.

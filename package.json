@@ -1,6 +1,6 @@
 {
   "name": "@entur/mui-comps-nmr",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MUI component library for Entur's hathor frontend — React, typed from the sobek GraphQL schema.",
   "license": "EUPL-1.2",
   "type": "module",
@@ -44,6 +44,7 @@
     "@mui/icons-material": "^7.0.2",
     "@mui/material": "^7.0.2",
     "@mui/x-data-grid": "^8.29.1",
+    "graphql-request": "^7.4.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
@@ -69,6 +70,7 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.0.0",
     "graphql": "^16.11.0",
+    "graphql-request": "^7.4.0",
     "husky": "^9.1.7",
     "jsdom": "^26.0.0",
     "react": "^19.1.0",
@@ -79,8 +81,5 @@
     "vite": "^8.0.0",
     "vite-plugin-dts": "^4.5.4",
     "vitest": "^4.0.0"
-  },
-  "dependencies": {
-    "graphql-request": "^7.4.0"
   }
 }
