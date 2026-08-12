@@ -40,8 +40,18 @@ false on the first commit (`LOAD_START` fires from a passive effect), so
 gating not-found on it flashed `Not found` on every mount. `load === 'ok'`
 + no value renders `Not found: <netexId>`; `load === 'error'` renders
 `errors.__init` instead, so a failed load is never reported as a missing
-record. Save failures with no GraphQL `errors` array fall back to
-`onError(['Failed to save'])`. Stale
+record. **Both halves fail alike**: load and save each normalize the thrown
+error, hand the server's own messages to `onError`, and fall back to a constant
+(`'Failed to load'` / `'Failed to save'`) only when the payload carries no
+GraphQL `errors` array. Load messages also land in `errors.__init`, joined by
+`'; '` (it renders as one line; `onError` gets them unjoined). The load path
+normalizes against an **empty** registry — a query takes a netexId, not an
+`input`, so every message is general by construction and none can be lost to
+field routing. Its `onError` is ref-held (an inline host arrow in the effect
+deps would re-fire the load) and epoch-guarded — the reducer discards a stale
+dispatch on its own, but a callback into host code has no such protection, so a
+retired or superseded load would otherwise pop an error for a form that has
+moved on. Stale
 responses guarded by a reducer `epoch`; `saving` is released on
 unmount-check alone, never gated on that epoch.
 
