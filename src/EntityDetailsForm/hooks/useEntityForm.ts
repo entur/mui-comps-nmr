@@ -3,6 +3,7 @@ import { GraphQLClient } from 'graphql-request';
 import { useSobekCtx } from '../../context/SobekContext';
 import type { FieldSpec } from '../types';
 import { toInputEntity } from '../toInput';
+import { reduceToSobekInput } from '../reduceToSobekInput';
 import { normalizeEntityErrors } from '../normalizeErrors';
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 
@@ -28,6 +29,8 @@ export interface EntityFormConfig {
   mutation: {
     document: TypedDocumentNode<any, any>;
     resultPath: readonly (string | number)[];
+    /** Generated wire-key mask for `<Entity>Input` — see `reduceToSobekInput`. */
+    inputKeys: Record<string, unknown>;
   };
 }
 
@@ -255,7 +258,10 @@ useEffect(() => {
       // back under another. Driven by the registry, not by the key: an entity
       // whose Input has no dataOwnerRef (or where distill derived it as
       // serverManaged) must not get one, or every save fails validation.
-      const writable = toInputEntity(value, fields);
+      // `fields` is distilled from the patched schema, so it can yield keys the
+      // live schema has never heard of; the mask is read from the live schema
+      // and drops them here, at the wire edge, leaving the form model intact.
+      const writable = reduceToSobekInput(toInputEntity(value, fields), mutation.inputKeys);
       const input = fields[OWNER_FIELD]?.locked
         ? { ...writable, [OWNER_FIELD]: dataOwnerRef }
         : writable;

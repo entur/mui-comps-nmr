@@ -35,6 +35,12 @@ const fields: Record<string, FieldSpec> = {
   dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'], locked: true },
 };
 
+/**
+ * Stand-in for the generated `<Entity>InputKeys` mask. Mirrors `fields` minus
+ * the server-managed `version`, which the live Input type would not carry.
+ */
+const wireKeys = { netexId: 1, name: 1, dataOwnerRef: 1 };
+
 /** Wraps an entity in the query's `vehicles.content[0]` result envelope. */
 const envelope = (entity: unknown) => ({ vehicles: { content: [entity] } });
 
@@ -69,6 +75,7 @@ const mkProps = (over: Partial<UseEntityFormProps> = {}): UseEntityFormProps => 
   mutation: {
     document: mutationDoc,
     resultPath: ['createOrUpdateVehicle'] as const,
+    inputKeys: wireKeys,
   },
   ...over,
 });

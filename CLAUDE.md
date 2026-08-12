@@ -129,10 +129,31 @@ for fields the live schema hasn't shipped. Currently `manufacturer`, `range`,
 `fullCharge`, `carLoading` on VehicleType. Extends **both** `type VehicleType`
 and `input VehicleTypeInput`: the read half satisfies distill's "Input ⊆ Entity"
 check, the input half keeps the field out of `serverManaged` (derived = on
-`Entity`, not on `Input`) — read-only extend ⇒ permanently locked control. Types
-deliberately ahead of live read schema — safe, lib runs no GraphQL ops. When
+`Entity`, not on `Input`) — read-only extend ⇒ permanently locked control. When
 sobek ships a field for real, delete matching `extend` lines by hand (done for
 `dataOwnerRef`, now a real read field).
+
+**Invariant: the patch is an input to `codegen.ts` only.** Wire-facing
+generators (`scripts/generateDocuments.ts`, `codegen-operations.ts`) read
+`sobek.schema.graphqls` alone, so a patched field is absent from every selection
+set by construction — no prune list to drift. Dropping the patch from
+`codegen-operations.ts` also makes it *validate* documents against the live
+schema, so a leak fails codegen instead of the backend (nothing else catches it:
+`src/stories/mockEndpoint.ts` is a schema-free `fetch` interceptor).
+
+The write half can't be fixed by a document — `$input` is a runtime variable —
+so `generateDocuments` emits `src/generated/operations/inputKeys.ts`, one
+`<Entity>InputKeys` mask per manifest entity read from the live schema's
+`<Entity>Input`. `useEntityForm` applies it via `reduceToSobekInput(inp, mask)`
+right after `toInputEntity`, before the `dataOwnerRef` stamp (a wire field, so
+unaffected). The `satisfies Record<keyof <Entity>Input, 1>` on each mask is a
+real guard, not decoration: keys come from `generateDocuments`' schema read, the
+type from graphql-codegen's — feed the patch to either and the build fails.
+`distillTypes.ts` and `toInput.ts` are deliberately untouched, so patched fields
+stay editable and round-trip through `onChange`; only the wire edge strips them.
+Residue: `Types.<Entity>Input` in `sobekTypes.ts` stays patched, so the
+*variables type* still permits those keys at compile time — only the runtime
+mask stops them.
 
 ## Tests
 

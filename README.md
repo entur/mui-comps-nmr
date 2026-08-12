@@ -248,10 +248,34 @@ because distill derives that flag from "present on `Entity`, absent from
 `Input`" — extend only the read type and the field renders permanently locked.
 
 The generated types are therefore deliberately **ahead of the live read
-schema**. This is safe because the library executes no GraphQL operations — it
-only generates types and renders a form. When sobek ships a field for real,
-delete the matching `extend` lines by hand (as was done for `dataOwnerRef`,
-which is now a genuine read-schema field).
+schema**. When sobek ships a field for real, delete the matching `extend` lines
+by hand (as was done for `dataOwnerRef`, which is now a genuine read-schema
+field).
+
+### Keeping the overlay off the wire
+
+The library *does* execute GraphQL operations, so an ahead-of-schema field would
+be rejected by the backend if it reached a request. One invariant prevents that:
+
+> `schema/sobek.patch.graphqls` is an input to `codegen.ts` only. Every
+> wire-facing generator reads `sobek.schema.graphqls` alone.
+
+- **Reads.** `scripts/generateDocuments.ts` builds selection sets from the live
+  schema, so a patched field is never selected — there is no prune list to keep
+  in sync. `codegen-operations.ts` does the same and therefore *validates* the
+  generated documents against the live schema: a leak fails codegen rather than
+  the backend.
+- **Writes.** `$input` is a runtime variable, so no document can filter it.
+  `generateDocuments` emits `src/generated/operations/inputKeys.ts` with one
+  `<Entity>InputKeys` mask per entity, read from the live `<Entity>Input`;
+  `useEntityForm` applies it through `reduceToSobekInput` immediately after
+  `toInputEntity`. Each mask carries
+  `satisfies Record<keyof <Entity>Input, 1>`, so the keyset and the generated
+  type must agree or the build fails.
+
+The form model is untouched by all this: patched fields render as ordinary
+editable controls and round-trip through `onChange`. Only the wire edge drops
+them.
 
 ## Building the library
 

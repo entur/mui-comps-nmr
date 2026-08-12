@@ -6,6 +6,7 @@ import { useSobekCtx } from '../../context/SobekContext';
 import { FIELDS } from '../../entities/vehicle';
 import type { Entity as Vehicle } from '../../entities/vehicle';
 import { GetVehicleDocument, UpdateVehicleDocument } from '../../generated/operations/vehicle.generated';
+import { VehicleInputKeys } from '../../generated/operations/inputKeys';
 import type { EntityDetailsFormProps } from '../types';
 
 const VehicleFormPresentation = createAbstractEntityDetailsForm<Vehicle>(FIELDS);
@@ -36,6 +37,7 @@ export function VehicleForm(props: VehicleFormProps) {
     mutation: {
       document: UpdateVehicleDocument,
       resultPath: ['createOrUpdateVehicle'] as const,
+      inputKeys: VehicleInputKeys,
     },
     netexId,
     ...rest,

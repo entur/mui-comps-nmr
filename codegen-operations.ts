@@ -8,7 +8,10 @@ import type { CodegenConfig } from '@graphql-codegen/cli';
  * into `src/generated/operations/`.
  */
 const config: CodegenConfig = {
-  schema: ['./schema/sobek.schema.graphqls', './schema/sobek.patch.graphqls'],
+  // Live schema only — never the patch overlay. Documents are validated against
+  // this schema, so a patch-only field reaching a document fails codegen here
+  // rather than the backend at runtime.
+  schema: ['./schema/sobek.schema.graphqls'],
   documents: './src/generated/operations/documents/**/*.graphql',
   generates: {
     'src/generated/operations/': {
