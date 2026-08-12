@@ -1,0 +1,112 @@
+---
+name: release
+description: Use when bumping the version or cutting a release of @entur/mui-comps-nmr — which files carry version refs, why the tag must follow the version commit, and the live-schema gotcha that makes a green local build no guarantee. Triggers on "bump the version", "release v0.x.0", "cut a release", "publish the tarball".
+---
+
+# Releasing `@entur/mui-comps-nmr`
+
+Not published to a registry. Hosts install from a **GitHub Release tarball URL**,
+so the release artifact and the docs that point at it are the whole product
+surface. `.github/workflows/release.yml` does the packing and publishing; your
+job is the version commit and the tag.
+
+## Deciding the number
+
+A URL install pins the exact tarball, so consumers upgrade by editing a URL —
+there is no range resolution to soften a change. Bias toward **minor** over
+patch: anything that changes what a host receives at runtime is a minor.
+
+Precedent:
+
+- `6fbade3` 0.2.0 → 0.3.0 — `graphql-request` moved to a peer dep (breaking for
+  consumers).
+- `f2861a2` 0.3.0 → 0.4.0 — patch-only schema fields stopped being sent to sobek
+  (runtime behaviour change, no API change).
+
+## Steps
+
+Run from a clean, synced `main`.
+
+1. **Manifest** — `npm version <new> --no-git-tag-version`. Updates
+   `package.json` and both version fields in `package-lock.json`. There is no
+   `version` lifecycle script, so nothing else fires. Do **not** let it create
+   the tag; the tag comes after the commit (see below).
+
+2. **Host guide** — `docs/using-entity-forms-host-guide.html` carries four
+   version refs that `npm version` does not touch:
+   - the install `<pre>` — download URL + `.tgz` filename
+   - the "Upgrading means editing the URL" callout — the `^<version>` range in prose
+   - the cheat-sheet `<li>` — same URL + filename
+   - the footer — "as exported from `@entur/mui-comps-nmr` v<version>"
+
+   One sed over the file handles all four:
+
+   ```bash
+   sed -i "s/v$OLD/v$NEW/g; s/entur-mui-comps-nmr-$OLD\.tgz/entur-mui-comps-nmr-$NEW.tgz/g; s/\^$OLD/^$NEW/g" \
+     docs/using-entity-forms-host-guide.html
+   ```
+
+   Completeness check — must come back empty:
+
+   ```bash
+   git grep -n "$OLD" -- . ':!package-lock.json'
+   ```
+
+   (Exclude the lock: transitive deps like `emoji-regex ^10.3.0` false-positive
+   on a `0.3.0` search.)
+
+3. **Commit** — `chore: <old> -> <new>`, body stating *why* this level (see
+   above) and what a host actually gets. Established form; keep it.
+
+4. **Push `main`**, then tag:
+
+   ```bash
+   git push origin main
+   git tag v<new> && git push origin v<new>
+   ```
+
+**Order is not optional.** `release.yml` compares `$GITHUB_REF_NAME` against
+`v$(node -p "require('./package.json').version")` and fails the release if they
+disagree — so the version commit must be on the branch the tag points at.
+
+## What the tag triggers
+
+`release.yml` on `push: tags: ['v*']`:
+
+1. `npm ci`, then the tag-vs-manifest guard.
+2. `npm pack` — `prepack` runs `npm run build`.
+3. `gh release create --generate-notes` with the `.tgz` attached.
+4. A second `gh release edit` appending schema provenance (bytes + fetch time)
+   to the notes.
+
+## Gotcha: a release is a function of source *and* schema
+
+`npm run build` → `pregenerate` → `distill` → `codegen` → `fetchSchema.ts`, which
+downloads the **live** sobek SDL from `https://entur.github.io/sobek/schema.graphqls`.
+The release therefore builds against whatever the schema says at that moment,
+not against what you tested locally. A green local build does not guarantee a
+green release build.
+
+Consequences worth remembering:
+
+- If sobek removed or renamed a field the generated documents select, the
+  release build fails even though nothing in the repo changed. Fix the schema
+  drift, don't re-run the workflow and hope.
+- The provenance line in the release notes is there so you can tell which schema
+  a given tarball was cut against. Read it before debugging a host issue.
+- Patch-overlay fields (`schema/sobek.patch.graphqls`) never reach the wire —
+  see the Patch overlay section in `CLAUDE.md` — so they are not a source of
+  release-build drift.
+
+## Verify
+
+```bash
+npm test && npm run build                          # before pushing
+node -p "require('./package.json').version"        # must equal the tag, minus 'v'
+gh run list --workflow release.yml --limit 1       # after the tag push
+gh release view v<new>                             # asset entur-mui-comps-nmr-<new>.tgz attached
+```
+
+The doc edit opens a 404 window: the install URLs name a release that does not
+exist until the workflow finishes. Confirm one URL resolves before telling
+anyone to upgrade.
