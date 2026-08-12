@@ -124,11 +124,17 @@
 
 <h2 id="import"><span class="num">2</span>Import &amp; the shape of a form</h2>
 <p>Both components are named exports. They render the fields plus — in edit mode — their own <strong>Save</strong> button. You place the component wherever you want the form to appear, anywhere below a <code>SobekProvider</code>.</p>
-<pre><code>import { SobekProvider, VehicleForm, VehicleTypeForm } from '@entur/mui-comps-nmr';
+<pre><code>// VehiclePane.tsx
+import { SobekProvider, VehicleForm } from '@entur/mui-comps-nmr';
+import type { SobekCtx } from '@entur/mui-comps-nmr';
 
-&lt;SobekProvider value={{ endpoint, getHeaders: authHeaders, dataOwnerRef }}&gt;
-  &lt;VehicleForm netexId="VEH:Vehicle:123" /&gt;
-&lt;/SobekProvider&gt;</code></pre>
+const session: SobekCtx = { endpoint, getHeaders: authHeaders, dataOwnerRef };
+
+export const VehiclePane = () =&gt; (
+  &lt;SobekProvider value={session}&gt;
+    &lt;VehicleForm netexId="VEH:Vehicle:123" /&gt;
+  &lt;/SobekProvider&gt;
+);</code></pre>
 
 <div class="callout warn"><strong>Session inputs are not props.</strong> <code>endpoint</code>, <code>headers</code>, <code>getHeaders</code> and <code>dataOwnerRef</code> live on the provider (§3), not on the form. Passing them to <code>&lt;VehicleForm&gt;</code> is a type error, and rendering a form with no provider above it throws.</div>
 
@@ -150,20 +156,25 @@
 <h2 id="auth"><span class="num">3</span>Session &amp; auth — the <code>SobekProvider</code></h2>
 <p>One provider, mounted once near the top of your app, supplies every form below it with the endpoint, the credentials, and the organisation whose data you're working on. It is <strong>mandatory</strong>: a data-aware form with no provider above it throws with <code>mui-comps-nmr: this component must be rendered inside a &lt;SobekProvider&gt;</code>.</p>
 
-<pre><code>import { SobekProvider } from '@entur/mui-comps-nmr';
+<pre><code>// Session.tsx
+import type { ReactNode } from 'react';
+import { SobekProvider } from '@entur/mui-comps-nmr';
+import type { SobekCtx } from '@entur/mui-comps-nmr';
 
-&lt;SobekProvider
-  value={{
-    endpoint: 'https://sobek.example/graphql',
-    headers: { 'X-Tenant': 'entur' },
-    getHeaders: async () =&gt; ({
-      Authorization: `Bearer ${await auth.getAccessToken()}`,
-    }),
-    dataOwnerRef: 'NOG:Authority:cP4aPiJ7c39',
-  }}
-&gt;
-  {/* …anything, at any depth… */}
-&lt;/SobekProvider&gt;</code></pre>
+const session: SobekCtx = {
+  endpoint: 'https://sobek.example/graphql',
+  headers: { 'X-Tenant': 'entur' },
+  getHeaders: async (): Promise&lt;Record&lt;string, string&gt;&gt; =&gt; ({
+    Authorization: `Bearer ${await auth.getAccessToken()}`,
+  }),
+  dataOwnerRef: 'NOG:Authority:cP4aPiJ7c39',
+};
+
+export const Session = ({ children }: { children: ReactNode }) =&gt; (
+  &lt;SobekProvider value={session}&gt;
+    {children /* …anything, at any depth… */}
+  &lt;/SobekProvider&gt;
+);</code></pre>
 
 <table>
   <thead><tr><th>Field</th><th>Type</th><th>What it's for</th></tr></thead>
@@ -224,10 +235,10 @@
 
 <h3>New</h3>
 <pre><code>// blank form → create a Vehicle (inside your SobekProvider)
-&lt;VehicleForm mode="edit" /&gt;
+&lt;VehicleForm mode="edit" /&gt;;
 
 // tell the host when it's been created
-&lt;VehicleForm onSaved={(newId) =&gt; navigate(`/vehicles/${newId}`)} /&gt;</code></pre>
+&lt;VehicleForm onSaved={(newId: string) =&gt; navigate(`/vehicles/${newId}`)} /&gt;;</code></pre>
 <div class="callout"><strong>The organisation is filled in for you.</strong> A create form shows <code>dataOwnerRef</code> already set from the provider, locked — the user neither picks it nor can change it, and the same value is what gets saved.</div>
 <div class="callout warn"><strong>Clearing <code>netexId</code> on a mounted form does not blank it.</strong> Going from an id to <code>undefined</code> only abandons the in-flight load — the values already on screen stay, deliberately, so an edit in progress is never wiped. To actually get an empty create form from a form that was showing a record, remount it: <code>key={netexId ?? 'new'}</code>.</div>
 
@@ -235,27 +246,34 @@
 <p>You don't call save. The user clicks the built-in button; you respond to the outcome:</p>
 <pre><code>&lt;VehicleForm
   netexId={id}
-  onSaved={(id) =&gt; {
-    toast.success('Saved');
+  onSaved={(savedId: string) =&gt; {
+    toast.success(`Saved ${savedId}`);
     refetchVehicleList();     // the record is now stale in your list
   }}
-  onError={(msgs) =&gt; toast.error(msgs.join('\n'))}
-/&gt;</code></pre>
+  onError={(msgs: string[]) =&gt; toast.error(msgs.join('\n'))}
+/&gt;;</code></pre>
 <div class="callout"><strong>After <code>onSaved</code>, re-pull any of your own copies of the record.</strong> The form shows the freshly-saved values itself, but a list or header elsewhere in your app won't know it changed until you refetch it.</div>
 
 <h3>Cancel / discard</h3>
 <p>Because the form owns the in-progress edits, “cancel” means “give me a fresh copy.” Drive it with a <code>key</code> — bumping the key remounts the form and reloads:</p>
-<pre><code>function EditPane({ id }) {
-  const [rev, setRev] = useState(0); // bump to discard edits
+<pre><code>import { useState } from 'react';
+import { VehicleForm } from '@entur/mui-comps-nmr';
+
+interface EditPaneProps {
+  id: string;
+}
+
+export function EditPane({ id }: EditPaneProps) {
+  const [rev, setRev] = useState&lt;number&gt;(0); // bump to discard edits
 
   return (
     &lt;&gt;
       &lt;VehicleForm
-        key={`${id}:${rev}`}      {/* new key ⇒ reload clean */}
+        key={`${id}:${rev}`}      // new key ⇒ reload clean
         netexId={id}
         onSaved={() =&gt; toast.success('Saved')}
       /&gt;
-      &lt;button onClick={() =&gt; setRev(r =&gt; r + 1)}&gt;Cancel&lt;/button&gt;
+      &lt;button onClick={() =&gt; setRev((r: number) =&gt; r + 1)}&gt;Cancel&lt;/button&gt;
     &lt;/&gt;
   );
 }</code></pre>
@@ -270,22 +288,29 @@
 <p>List on the left, form on the right. Session from the provider, auth from your app's hook, <code>key</code> for clean switching, view↔edit toggle, and a cancel that discards.</p>
 <pre><code>import { useState } from 'react';
 import { SobekProvider, VehicleForm } from '@entur/mui-comps-nmr';
+import type { Vehicle } from '@entur/mui-comps-nmr';
 import { useAuth } from './auth';
 
 const ENDPOINT = 'https://sobek.example/graphql';
 
-export function VehiclesPage({ vehicles, refetchList, dataOwnerRef }) {
+interface VehiclesPageProps {
+  vehicles: Pick&lt;Vehicle, 'netexId' | 'name'&gt;[];
+  refetchList: () =&gt; void;
+  dataOwnerRef: string;
+}
+
+export function VehiclesPage({ vehicles, refetchList, dataOwnerRef }: VehiclesPageProps) {
   const auth = useAuth();
   const [selected, setSelected] = useState&lt;string | undefined&gt;();
   const [mode, setMode] = useState&lt;'view' | 'edit'&gt;('view');
-  const [rev, setRev] = useState(0);
+  const [rev, setRev] = useState&lt;number&gt;(0);
 
   // no memoization needed — read per request, never a reload trigger
-  const getHeaders = async () =&gt; ({
+  const getHeaders = async (): Promise&lt;Record&lt;string, string&gt;&gt; =&gt; ({
     Authorization: `Bearer ${await auth.getAccessToken()}`,
   });
 
-  const discard = () =&gt; setRev(r =&gt; r + 1);
+  const discard = (): void =&gt; setRev((r: number) =&gt; r + 1);
 
   return (
     &lt;SobekProvider value={{ endpoint: ENDPOINT, getHeaders, dataOwnerRef }}&gt;
@@ -294,9 +319,9 @@ export function VehiclesPage({ vehicles, refetchList, dataOwnerRef }) {
         &lt;button onClick={() =&gt; { setSelected(undefined); setMode('edit'); }}&gt;
           + New vehicle
         &lt;/button&gt;
-        {vehicles.map(v =&gt; (
+        {vehicles.map((v) =&gt; (
           &lt;button key={v.netexId} onClick={() =&gt; { setSelected(v.netexId); setMode('view'); }}&gt;
-            {v.name}
+            {v.name?.value ?? v.netexId}
           &lt;/button&gt;
         ))}
       &lt;/nav&gt;
@@ -309,15 +334,15 @@ export function VehiclesPage({ vehicles, refetchList, dataOwnerRef }) {
         &lt;/header&gt;
 
         &lt;VehicleForm
-          key={`${selected ?? 'new'}:${rev}`}   {/* clean switch + discard */}
-          netexId={selected}                    {/* undefined ⇒ new */}
+          key={`${selected ?? 'new'}:${rev}`}   // clean switch + discard
+          netexId={selected}                    // undefined ⇒ new
           mode={mode}
-          onSaved={(id) =&gt; {
-            setSelected(id);
+          onSaved={(savedId: string) =&gt; {
+            setSelected(savedId);
             setMode('view');
-            refetchList();                        // keep the list fresh
+            refetchList();                      // keep the list fresh
           }}
-          onError={(msgs) =&gt; alert(msgs.join('\n'))}
+          onError={(msgs: string[]) =&gt; alert(msgs.join('\n'))}
         /&gt;
       &lt;/section&gt;
     &lt;/div&gt;
