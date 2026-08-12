@@ -56,7 +56,7 @@ const layout: VehicleLayout = {
 | `variant?` | `'tabs' \| 'stacked'` | ≥2 sections. Default `'tabs'`. |
 | `slotProps?` | `ControlSlotProps` | Per-kind MUI overrides (TextField, Switch, DataGrid, Tabs). |
 | `onSaved?` | `(netexId: string) => void` | Called after successful save + refetch. |
-| `onError?` | `(generalErrors: string[]) => void` | Called with non-field GraphQL / network errors, **on load and on save**. Carries the server's own messages; falls back to `['Failed to load']` / `['Failed to save']` only when the failure has no GraphQL `errors` array. |
+| `onError?` | `(generalErrors: string[]) => void` | Called with non-field GraphQL / network errors, **on load and on save**. Carries the server's own messages; falls back to `['Failed to load']` / `['Failed to save']` when the failure yields no usable GraphQL errors (missing *or* empty `errors`). Field-level validation on save routes to the fields for inline display and fires no callback. |
 
 While an entity is loading the component renders `Loading...`; a settled load
 that returned no rows renders `Not found: <netexId>`, and a *failed* load

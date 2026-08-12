@@ -6,10 +6,12 @@ import { toInputEntity } from '../toInput';
 import { normalizeEntityErrors } from '../normalizeErrors';
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 
-// Last-resort messages for failures that carry no usable GraphQL error payload
-// (transport errors, malformed responses). Whenever the server does send
-// messages they win, on both halves — these only fill the silence. Hosts
-// intercept either half through `onError`.
+// Last-resort messages for failures that yield no usable message (transport
+// errors, malformed responses, an empty `errors` array). Whenever the server
+// does send messages they win, on both halves — these only fill the silence,
+// and when they do they reach the host through `onError`. Note that `onError`
+// carries *general* errors only: a save rejected purely on field validation
+// routes to `errors` for inline display and fires no callback.
 const LOAD_ERR = 'Failed to load', SAVE_ERR = 'Failed to save';
 
 // Registry key of the tenant discriminator. Stamped onto the write payload only
