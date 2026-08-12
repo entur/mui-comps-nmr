@@ -16,7 +16,7 @@ export function reduceToSobekInput(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(inp)) {
-    if (k in mask) out[k] = v;
+    if (Object.prototype.hasOwnProperty.call(mask, k)) out[k] = v;
   }
   return out;
 }
