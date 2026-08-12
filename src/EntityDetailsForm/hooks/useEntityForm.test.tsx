@@ -154,7 +154,8 @@ describe('useEntityForm', () => {
     expect(mockFns.request).not.toHaveBeenCalled();
   });
 
-  it('exposes fieldErrors on load failure', async () => {
+  it('surfaces the server message on load failure, to state and to onError', async () => {
+    const onError = vi.fn();
     mockFns.request.mockRejectedValueOnce({
       response: {
         errors: [
@@ -163,11 +164,67 @@ describe('useEntityForm', () => {
       },
     });
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:99' }));
+    const { result } = renderForm(mkProps({ netexId: 'VEH:99', onError }));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    // The load half mirrors the save half: the server's own words reach the
+    // host, not a constant that flattens 401/403/404/socket-drop into one string.
+    expect(result.current.errors).toEqual({ __init: 'Not found' });
+    expect(onError).toHaveBeenCalledWith(['Not found']);
+    expect(result.current.value).toBeUndefined();
+  });
+
+  it('falls back to a constant when a load failure carries no GraphQL errors', async () => {
+    const onError = vi.fn();
+    mockFns.request.mockRejectedValueOnce(new Error('boom'));
+
+    const { result } = renderForm(mkProps({ netexId: 'VEH:99', onError }));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.errors).toEqual({ __init: 'Failed to load' });
-    expect(result.current.value).toBeUndefined();
+    expect(onError).toHaveBeenCalledWith(['Failed to load']);
+  });
+
+  it('joins multiple load errors for display but hands onError the array', async () => {
+    const onError = vi.fn();
+    mockFns.request.mockRejectedValueOnce({
+      response: {
+        errors: [{ message: 'Unauthorized' }, { message: 'Token expired' }],
+      },
+    });
+
+    const { result } = renderForm(mkProps({ netexId: 'VEH:99', onError }));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.errors).toEqual({ __init: 'Unauthorized; Token expired' });
+    expect(onError).toHaveBeenCalledWith(['Unauthorized', 'Token expired']);
+  });
+
+  it('does not call onError for a load retired before it failed', async () => {
+    const onError = vi.fn();
+    let rejectLoad: (e: unknown) => void = () => {};
+    mockFns.request.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => {
+        rejectLoad = reject;
+      })
+    );
+
+    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1', onError }));
+
+    await waitFor(() => expect(result.current.loading).toBe(true));
+
+    // Host drops netexId (edit -> create) while the load is still in flight.
+    rerender(mkProps({ onError }));
+
+    // The failure belongs to the abandoned edit form. The reducer discards the
+    // dispatch on its own epoch check, but a callback has no reducer to protect
+    // it — without an explicit guard the host pops an error for a form that has
+    // already moved on.
+    act(() => rejectLoad(new Error('boom')));
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(result.current.errors).toEqual({});
   });
 
   it('waits for async getHeaders, then merges dynamic over static headers', async () => {

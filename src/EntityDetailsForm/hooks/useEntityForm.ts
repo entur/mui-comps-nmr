@@ -6,8 +6,10 @@ import { toInputEntity } from '../toInput';
 import { normalizeEntityErrors } from '../normalizeErrors';
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 
-// Fallback messages for failures that carry no usable GraphQL error payload
-// (transport errors, malformed responses). Hosts localize by intercepting these.
+// Last-resort messages for failures that carry no usable GraphQL error payload
+// (transport errors, malformed responses). Whenever the server does send
+// messages they win, on both halves — these only fill the silence. Hosts
+// intercept either half through `onError`.
 const LOAD_ERR = 'Failed to load', SAVE_ERR = 'Failed to save';
 
 // Registry key of the tenant discriminator. Stamped onto the write payload only
@@ -59,7 +61,7 @@ type LoadPhase = 'idle' | 'pending' | 'ok' | 'error';
 type EntityFormAction<E> =
   | { type: 'LOAD_START' }
   | { type: 'LOAD_SUCCESS'; epoch: number; entity: E | undefined }
-  | { type: 'LOAD_FAILURE'; epoch: number }
+  | { type: 'LOAD_FAILURE'; epoch: number; message: string }
   | { type: 'LOAD_RETIRED' } // netexId removed: abandon in-flight load
   | { type: 'SAVE_START' }
   | { type: 'SAVE_SUCCESS'; epoch: number; entity: E | undefined }
@@ -79,7 +81,7 @@ function entityFormReducer<E>(
       return { ...state, loading: false, load: 'ok', value: action.entity, errors: {} };
     case 'LOAD_FAILURE':
       if (action.epoch !== state.epoch) return state;
-      return { ...state, loading: false, load: 'error', errors: { __init: LOAD_ERR } };
+      return { ...state, loading: false, load: 'error', errors: { __init: action.message } };
     case 'LOAD_RETIRED':
       // Keep any locally edited value (create mode), just stop waiting on the
       // retired load. Bumping epoch makes its late response a no-op. Must not
@@ -155,11 +157,17 @@ useEffect(() => {
   const mutationRef = useRef(props.mutation);
   const headersRef = useRef(headers);
   const getHeadersRef = useRef(getHeaders);
+  // Same reasoning for `onError`, which the load effect below calls: a host
+  // passing an inline arrow would otherwise put a fresh identity in the effect's
+  // deps every render and re-fire the load. `handleSave` reads it from props
+  // directly — a callback, not an effect, so re-creating it is harmless.
+  const onErrorRef = useRef(onError);
   useEffect(() => { fieldsRef.current = props.fields; }, [props.fields]);
   useEffect(() => { queryRef.current = props.query; }, [props.query]);
   useEffect(() => { mutationRef.current = props.mutation; }, [props.mutation]);
   useEffect(() => { headersRef.current = headers; }, [headers]);
   useEffect(() => { getHeadersRef.current = getHeaders; }, [getHeaders]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
 
   // Resolve headers (static + dynamic) per request rather than into state.
   // Holding them in state made every inline `headers`/`getHeaders` literal mint a
@@ -208,9 +216,23 @@ useEffect(() => {
         const entity = query.resultPath.reduce((o: any, k: string | number) => o?.[k], data);
         dispatch({ type: 'LOAD_SUCCESS', epoch, entity });
       })
-      .catch(_e => {
-        if (!mounted.current) return;
-        dispatch({ type: 'LOAD_FAILURE', epoch });
+      .catch(e => {
+        // Unlike the dispatches above, the epoch check here is not redundant
+        // with the reducer's: `onError` is a call into host code and has no
+        // reducer to discard it. Without the guard a load retired by
+        // LOAD_RETIRED (netexId cleared) or superseded by a newer one still
+        // pops an error for a form that has already moved on.
+        if (!mounted.current || epoch !== epochRef.current) return;
+        // Empty registry by design: the query takes a netexId, not an `input`,
+        // so there are no field paths to route to and every message is general.
+        // Passing the real `fields` would happen to work today (a query error's
+        // path has no 'input' segment) but would be relying on an accident.
+        const { generalErrors } = normalizeEntityErrors(e, {});
+        const general = generalErrors.length ? generalErrors : [LOAD_ERR];
+        // `__init` is one string (it renders as one line); the host gets them
+        // unjoined so it can localize or triage per message.
+        dispatch({ type: 'LOAD_FAILURE', epoch, message: general.join('; ') });
+        onErrorRef.current?.(general);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, netexId, resolveHeaders, dataOwnerRef]);

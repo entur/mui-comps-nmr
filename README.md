@@ -56,12 +56,15 @@ const layout: VehicleLayout = {
 | `variant?` | `'tabs' \| 'stacked'` | ≥2 sections. Default `'tabs'`. |
 | `slotProps?` | `ControlSlotProps` | Per-kind MUI overrides (TextField, Switch, DataGrid, Tabs). |
 | `onSaved?` | `(netexId: string) => void` | Called after successful save + refetch. |
-| `onError?` | `(generalErrors: string[]) => void` | Called with non-field GraphQL / network errors. |
+| `onError?` | `(generalErrors: string[]) => void` | Called with non-field GraphQL / network errors, **on load and on save**. Carries the server's own messages; falls back to `['Failed to load']` / `['Failed to save']` only when the failure has no GraphQL `errors` array. |
 
 While an entity is loading the component renders `Loading...`; a settled load
 that returned no rows renders `Not found: <netexId>`, and a *failed* load
 renders the load error — the three states are distinct, so a network failure is
-never reported as a missing record.
+never reported as a missing record. The rendered load error is the server's
+message (several joined by `'; '`), so a 401, a 403 and a dropped socket stay
+distinguishable; `onError` fires alongside it with the same messages unjoined,
+which is where a host hooks retry, re-auth or localization.
 
 #### Session context
 
