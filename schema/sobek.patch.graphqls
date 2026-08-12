@@ -1,6 +1,13 @@
 # Committed overlay — keeps Input ⊆ Entity until sobek adds these to the read types.
-# These fields are intentionally AHEAD of the live read schema; safe because this
-# project executes no GraphQL operations (types + form only).
+# These fields are intentionally AHEAD of the live read schema.
+#
+# INVARIANT: this file is an input to `codegen.ts` ONLY. Every wire-facing
+# generator (`scripts/generateDocuments.ts`, `codegen-operations.ts`) reads
+# `sobek.schema.graphqls` alone, so nothing declared here can reach a request:
+# it is absent from every selection set, and `reduceToSobekInput` strips it from
+# the mutation input using the generated `<Entity>InputKeys` mask. Fields below
+# render as ordinary editable controls and round-trip through `onChange`; only
+# the wire edge drops them.
 
 # vehicleModel props inlined onto VehicleType (manufacturer / range / full-charge).
 # Added to BOTH read + input so distill derives them as editable (not serverManaged).

@@ -9,7 +9,7 @@
  * `FIELDS` registry.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { readFileSync } from 'node:fs';
@@ -20,6 +20,7 @@ import { humanize } from '../../shared/humanize';
 import type { FieldSpec } from '../types';
 import * as forms from './index';
 import * as entities from '../../entities';
+import * as inputKeys from '../../generated/operations/inputKeys';
 
 // cwd-relative, matching how the generator itself reads the manifest.
 const MANIFEST = 'entities.manifest.json';
@@ -31,6 +32,7 @@ const OWNER_FIELD = 'dataOwnerRef';
 interface ManifestEntry {
   entity: string;
   queryRoot: string;
+  mutationName: string;
 }
 
 const camel = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
@@ -64,15 +66,19 @@ const bind = (entry: ManifestEntry) => {
   const fields = (entities as Record<string, Record<string, FieldSpec>>)[
     `${camel(entry.entity)}Fields`
   ];
+  const mask = (inputKeys as Record<string, Record<string, unknown>>)[
+    `${entry.entity}InputKeys`
+  ];
   if (!comp) throw new Error(`no generated wrapper exported for ${entry.entity}`);
   if (!fields) throw new Error(`no distilled FIELDS for ${entry.entity}`);
-  return { Form: comp, fields };
+  if (!mask) throw new Error(`no generated input keyset for ${entry.entity}`);
+  return { Form: comp, fields, mask };
 };
 
 describe.each(manifest.map(e => [e.entity, e] as const))(
   '%s wrapper contract',
   (_name, entry) => {
-    const { Form, fields } = bind(entry);
+    const { Form, fields, mask } = bind(entry);
     const rows = (content: unknown[]) => ({ [entry.queryRoot]: { content } });
 
     beforeEach(() => {
@@ -124,6 +130,34 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
 
       await waitFor(() => expect(screen.getByText('Failed to load')).toBeInTheDocument());
       expect(screen.queryByText(`Not found: ${NETEX_ID}`)).toBeNull();
+    });
+
+    // `FIELDS` is distilled from the patched schema, the mask from the live one,
+    // so the difference is exactly the fields sobek would reject. They must reach
+    // the control but never the request.
+    const patchOnly = Object.keys(fields).filter(
+      k => !fields[k].serverManaged && !fields[k].locked && !(fields[k].path[0] in mask)
+    );
+
+    it.runIf(patchOnly.length)('saves no patch-only field', async () => {
+      const row = {
+        netexId: NETEX_ID,
+        ...Object.fromEntries(patchOnly.map(k => [fields[k].path[0], 'x'])),
+      };
+      mockFns.request
+        .mockResolvedValueOnce(rows([row]))
+        .mockResolvedValueOnce({ [entry.mutationName]: NETEX_ID })
+        .mockResolvedValueOnce(rows([row]));
+
+      render(<Form netexId={NETEX_ID} />, { wrapper });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(mockFns.request).toHaveBeenCalledTimes(3));
+      const [, vars] = mockFns.request.mock.calls[1];
+      const sent = Object.keys((vars as { input: Record<string, unknown> }).input);
+      expect(sent).not.toHaveLength(0);
+      expect(sent.filter(k => !(k in mask))).toEqual([]);
     });
 
     // Locked fields are client-supplied but not user-editable; the wrapper must

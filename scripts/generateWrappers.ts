@@ -39,6 +39,7 @@ export const renderWrapperSource = (entry: ManifestEntry): string => {
 
   const getDoc = `Get${entityName}Document`;
   const updateDoc = `Update${entityName}Document`;
+  const inputKeys = `${entityName}InputKeys`;
 
   return [
       BANNER,
@@ -48,6 +49,7 @@ export const renderWrapperSource = (entry: ManifestEntry): string => {
       `import { FIELDS } from '../../entities/${fileName}';`,
       `import type { Entity as ${entityName} } from '../../entities/${fileName}';`,
       `import { ${getDoc}, ${updateDoc} } from '../../generated/operations/${fileName}.generated';`,
+      `import { ${inputKeys} } from '../../generated/operations/inputKeys';`,
       `import type { EntityDetailsFormProps } from '../types';`,
       '',
       `const ${compName}Presentation = createAbstractEntityDetailsForm<${entityName}>(FIELDS);`,
@@ -78,6 +80,7 @@ export const renderWrapperSource = (entry: ManifestEntry): string => {
       `    mutation: {`,
       `      document: ${updateDoc},`,
       `      resultPath: ['${entry.mutationName}'] as const,`,
+      `      inputKeys: ${inputKeys},`,
       `    },`,
       `    netexId,`,
       `    ...rest,`,

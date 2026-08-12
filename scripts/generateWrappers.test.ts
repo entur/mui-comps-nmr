@@ -26,6 +26,11 @@ describe('renderWrapperSource', () => {
     );
   });
 
+  it('hands the generated wire-key mask to the mutation config', () => {
+    expect(src).toMatch(/import \{ VehicleInputKeys \} from '\.\.\/\.\.\/generated\/operations\/inputKeys';/);
+    expect(src).toMatch(/inputKeys: VehicleInputKeys,/);
+  });
+
   it('gates not-found on the settled load phase, never on `loading`', () => {
     // `loading` is false on the first commit (LOAD_START fires from a passive
     // effect), so a not-found branch gated on it flashes on every mount.

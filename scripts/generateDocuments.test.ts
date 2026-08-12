@@ -1,0 +1,88 @@
+import { describe, it, expect } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { buildSchema, parse, visit } from 'graphql';
+import { SCHEMA_FILES, buildInputKeysModule } from './generateDocuments';
+
+const SDL = `
+  type Query { things(filter: ThingFilter!, page: Int, size: Int): ThingPage }
+  type Mutation { createOrUpdateThing(input: ThingInput!): String }
+  input ThingFilter { netexIds: [String] }
+  type ThingPage { content: [Thing] }
+  type Thing { netexId: String, weight: Float, version: String }
+  input ThingInput { netexId: String, weight: Float }
+`;
+
+const ENTRY = {
+  entity: 'Thing',
+  queryRoot: 'things',
+  mutationName: 'createOrUpdateThing',
+  fileName: 'thing',
+};
+
+describe('SCHEMA_FILES', () => {
+  it('excludes the patch overlay — wire generators read the live schema alone', () => {
+    expect(SCHEMA_FILES).not.toContain('./schema/sobek.patch.graphqls');
+    expect(SCHEMA_FILES).toContain('./schema/sobek.schema.graphqls');
+  });
+});
+
+describe('buildInputKeysModule', () => {
+  const emit = () => buildInputKeysModule([ENTRY], buildSchema(SDL));
+
+  it('emits one key per member of the entity Input type', () => {
+    expect(emit()).toMatch(/export const ThingInputKeys = \{[^}]*netexId: 1[^}]*\}/s);
+    expect(emit()).toMatch(/export const ThingInputKeys = \{[^}]*weight: 1[^}]*\}/s);
+  });
+
+  it('omits members the Input type does not declare', () => {
+    expect(emit()).not.toMatch(/\bversion: 1\b/);
+  });
+
+  it('pins the keyset to the generated Input type', () => {
+    expect(emit()).toMatch(/import type \{ ThingInput \} from '\.\/thing\.generated';/);
+    expect(emit()).toMatch(/\} satisfies Record<keyof ThingInput, 1>;/);
+  });
+});
+
+/**
+ * End-to-end guard on freshly generated output (`pretest` runs `generate`).
+ * Every field the patch overlay adds to a manifest entity must be absent from
+ * that entity's operation document — this is the assertion the original bug
+ * would have failed.
+ */
+describe('generated documents', () => {
+  const patchSdl = readFileSync(resolve('schema/sobek.patch.graphqls'), 'utf8');
+  const manifest: { entity: string }[] = JSON.parse(readFileSync(resolve('entities.manifest.json'), 'utf8'));
+  const docDir = resolve('src/generated/operations/documents');
+
+  /** `extend type X { a b }` → Map<'X', ['a','b']> (read half only). */
+  const patched = new Map<string, string[]>();
+  visit(parse(patchSdl), {
+    ObjectTypeExtension(node) {
+      patched.set(
+        node.name.value,
+        (node.fields ?? []).map(f => f.name.value)
+      );
+    },
+  });
+
+  const covered = manifest.filter(m => patched.has(m.entity));
+
+  it('has at least one patched entity to check', () => {
+    expect(covered.length).toBeGreaterThan(0);
+  });
+
+  it.each(covered.map(m => m.entity))('%s document selects no patch-only field', entity => {
+    const file = readdirSync(docDir).find(
+      f => f.toLowerCase() === `${entity.toLowerCase()}.graphql`
+    );
+    expect(file, `no generated document for ${entity}`).toBeDefined();
+    const doc = readFileSync(resolve(docDir, file!), 'utf8');
+    for (const field of patched.get(entity)!) {
+      expect(doc, `${entity}.graphql selects patch-only field "${field}"`).not.toMatch(
+        new RegExp(`^\\s*${field}\\b`, 'm')
+      );
+    }
+  });
+});
