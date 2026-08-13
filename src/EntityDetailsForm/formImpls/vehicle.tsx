@@ -17,6 +17,13 @@ export interface VehicleFormProps
   mode?: 'view' | 'edit';
   onSaved?: (netexId: string) => void;
   onError?: (generalErrors: string[]) => void;
+  /** Every change to the entity, including the load and the post-save refetch.
+   *  Observation only — the form keeps owning its state. `undefined` when a
+   *  load settles with no matching record, so the host can clear what it shows. */
+  onChange?: (value: Vehicle | undefined) => void;
+  /** Fired when the form crosses between clean and dirty, against the entity
+   *  the server last returned. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function VehicleForm(props: VehicleFormProps) {

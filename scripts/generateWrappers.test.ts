@@ -31,6 +31,13 @@ describe('renderWrapperSource', () => {
     expect(src).toMatch(/inputKeys: VehicleInputKeys,/);
   });
 
+  it('declares the host observation callbacks on the props interface', () => {
+    // Not passed to the presentation: they fall into `...rest` and reach
+    // `useEntityForm`, which owns both the value and the baseline.
+    expect(src).toMatch(/onChange\?: \(value: Vehicle \| undefined\) => void;/);
+    expect(src).toMatch(/onDirtyChange\?: \(dirty: boolean\) => void;/);
+  });
+
   it('gates not-found on the settled load phase, never on `loading`', () => {
     // `loading` is false on the first commit (LOAD_START fires from a passive
     // effect), so a not-found branch gated on it flashes on every mount.

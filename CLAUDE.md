@@ -55,6 +55,21 @@ moved on. Stale
 responses guarded by a reducer `epoch`; `saving` is released on
 unmount-check alone, never gated on that epoch.
 
+**Host observation** (`onChange` / `onDirtyChange`, both optional, both
+ref-held so an inline arrow can't re-fire the effects). `onChange` fires on
+*every* value change — load and post-save refetch included, not just edits — so
+a host header can show the loaded name without waiting for a keystroke.
+Observation only: the hook keeps owning the value, and feeding it back in as a
+prop is unsupported (it would reintroduce the load/epoch races). Dirty is
+computed against a `baseline` in reducer state, set by `LOAD_SUCCESS` and
+`SAVE_SUCCESS` — so a saved form is clean without the host re-baselining. The
+comparison (`src/EntityDetailsForm/dirty.ts`) treats `undefined | null | false |
+'' | []` as one value, which is what stops an untouched Switch reporting `false`
+against a null-backed baseline, or a text field typed into and cleared, from
+reading as edits. `0` is deliberately not empty. Both callbacks reach the hook
+through the generated wrapper's `...rest`, so the generator only declares them
+on `<Entity>FormProps` — nothing else in the template changes.
+
 - `mode` `'view' | 'edit'` — view disables inputs.
 - `layout?` — whitelist of sections (`{ Section: [fields] }`). Omitted field not
   rendered but value round-trips via `onChange` (loss-free). Omit layout → flat.

@@ -35,6 +35,12 @@ interface ManifestEntry {
   mutationName: string;
 }
 
+interface WrapperProps {
+  netexId?: string;
+  onChange?: (value: unknown) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+}
+
 const camel = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
 
 const manifest: ManifestEntry[] = JSON.parse(readFileSync(resolve(MANIFEST), 'utf8'));
@@ -60,7 +66,10 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 
 /** Resolve one manifest entry to the generated component + its field registry. */
 const bind = (entry: ManifestEntry) => {
-  const comp = (forms as Record<string, ComponentType<{ netexId?: string }>>)[
+  // Structural stand-in for the generated `<Entity>FormProps`, kept
+  // entity-agnostic so this stays manifest-driven. The generated interface
+  // itself is pinned by `scripts/generateWrappers.test.ts`.
+  const comp = (forms as Record<string, ComponentType<WrapperProps>>)[
     `${entry.entity}Form`
   ];
   const fields = (entities as Record<string, Record<string, FieldSpec>>)[
@@ -158,6 +167,20 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
       const sent = Object.keys((vars as { input: Record<string, unknown> }).input);
       expect(sent).not.toHaveLength(0);
       expect(sent.filter(k => !(k in mask))).toEqual([]);
+    });
+
+    it('forwards the loaded entity to the host via onChange', async () => {
+      const row = { netexId: NETEX_ID };
+      mockFns.request.mockResolvedValueOnce(rows([row]));
+      const onChange = vi.fn();
+
+      render(<Form netexId={NETEX_ID} onChange={onChange} />, { wrapper });
+
+      // Pins the `...rest` passthrough into the hook. Note this passes even if
+      // the generated props interface omits the callback — `rest` is untyped at
+      // runtime, so the declaration is pinned separately, by the generator's
+      // string test.
+      await waitFor(() => expect(onChange).toHaveBeenCalledWith(row));
     });
 
     // Locked fields are client-supplied but not user-editable; the wrapper must
