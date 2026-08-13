@@ -22,6 +22,8 @@ Precedent:
   consumers).
 - `f2861a2` 0.3.0 → 0.4.0 — patch-only schema fields stopped being sent to sobek
   (runtime behaviour change, no API change).
+- `8a2d280` 0.4.0 → 0.5.0 — new API surface: exported wrapper props types (#24)
+  and `onChange` / `onDirtyChange` (#25).
 
 ## Steps
 
@@ -46,14 +48,17 @@ Run from a clean, synced `main`.
      docs/using-entity-forms-host-guide.html
    ```
 
-   Completeness check — must come back empty:
+   Completeness check — must come back empty. Use `-F`: unescaped dots make
+   `0.4.0` a regex that matches `2024-01-01T00:00:00Z` (`0`·`2`·`4`·`-`·`0`),
+   so a plain `git grep` reports timestamps in fixtures as leftovers.
 
    ```bash
-   git grep -n "$OLD" -- . ':!package-lock.json'
+   git grep -nF "$OLD" -- . ':!package-lock.json' ':!.claude'
    ```
 
-   (Exclude the lock: transitive deps like `emoji-regex ^10.3.0` false-positive
-   on a `0.3.0` search.)
+   Two exclusions, both deliberate: the lock (transitive deps like
+   `emoji-regex ^10.3.0` false-positive on a `0.3.0` search) and `.claude`
+   (this file's precedent list cites old versions on purpose).
 
 3. **Commit** — `chore: <old> -> <new>`, body stating *why* this level (see
    above) and what a host actually gets. Established form; keep it.
