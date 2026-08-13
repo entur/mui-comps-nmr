@@ -433,4 +433,67 @@ describe('useEntityForm', () => {
     expect(onSaved).toHaveBeenCalledWith('VEH:1');
     expect(onError).not.toHaveBeenCalled();
   });
+
+  it('reports the loaded entity to onChange, before any edit', async () => {
+    mockFns.request.mockResolvedValueOnce(envelope(TRAM));
+    const onChange = vi.fn();
+
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onChange }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // A host header must be able to show the loaded name without waiting for a
+    // keystroke, so this fires on the load, not only on user edits.
+    expect(onChange).toHaveBeenCalledWith(TRAM);
+  });
+
+  it('reports each edit to onChange', async () => {
+    mockFns.request.mockResolvedValueOnce(envelope(TRAM));
+    const onChange = vi.fn();
+
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onChange }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const edited = { ...TRAM, name: { value: 'Tram Two' } };
+    act(() => result.current.setValue(edited as any));
+
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(edited));
+  });
+
+  it('flags dirty on an edit and clean again when it is reverted', async () => {
+    mockFns.request.mockResolvedValueOnce(envelope(TRAM));
+    const onDirtyChange = vi.fn();
+
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onDirtyChange }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.dirty).toBe(false);
+
+    act(() => result.current.setValue({ ...TRAM, name: { value: 'Edited' } } as any));
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
+
+    act(() => result.current.setValue(TRAM as any));
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
+    expect(result.current.dirty).toBe(false);
+  });
+
+  it('re-baselines on a successful save, so a saved form is clean', async () => {
+    const updated = { netexId: 'VEH:1', name: { value: 'Tram Updated' } };
+    mockFns.request
+      .mockResolvedValueOnce(envelope(TRAM))
+      .mockResolvedValueOnce({ createOrUpdateVehicle: 'VEH:1' })
+      .mockResolvedValueOnce(envelope(updated));
+
+    const onDirtyChange = vi.fn();
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onDirtyChange }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.setValue(updated as any));
+    await waitFor(() => expect(result.current.dirty).toBe(true));
+
+    await act(async () => result.current.handleSave());
+    await waitFor(() => expect(result.current.saving).toBe(false));
+
+    expect(result.current.dirty).toBe(false);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
 });

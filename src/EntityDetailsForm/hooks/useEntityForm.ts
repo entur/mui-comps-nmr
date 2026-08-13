@@ -5,6 +5,7 @@ import type { FieldSpec } from '../types';
 import { toInputEntity } from '../toInput';
 import { reduceToSobekInput } from '../reduceToSobekInput';
 import { normalizeEntityErrors } from '../normalizeErrors';
+import { isDirty } from '../dirty';
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 
 // Last-resort messages for failures that yield no usable message (transport
@@ -38,6 +39,19 @@ export interface UseEntityFormProps extends EntityFormConfig {
   netexId?: string;
   onSaved?: (netexId: string) => void;
   onError?: (generalErrors: string[]) => void;
+  /**
+   * Every change to the form's entity, including the initial load and the
+   * post-save refetch — not just user edits. Read-only observation: the hook
+   * stays the source of truth, so feeding the value back in as a prop is not
+   * supported. Use `onDirtyChange` to detect *edits*.
+   */
+  onChange?: (value: any) => void;
+  /**
+   * Fired when the form crosses between clean and dirty. The baseline is the
+   * entity the server last handed back (load or post-save refetch), compared
+   * under the empty-ish rule in `./dirty`.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 // --- Reducer: explicit async state machine -----------------------------
@@ -49,6 +63,8 @@ export interface UseEntityFormProps extends EntityFormConfig {
 
 interface EntityFormState<E> {
   value: E | undefined;
+  /** Server's last word on this entity — what `value` is diffed against. */
+  baseline: E | undefined;
   loading: boolean;
   saving: boolean;
   errors: Record<string, string>;
@@ -83,7 +99,7 @@ function entityFormReducer<E>(
       return { ...state, loading: true, load: 'pending', epoch: state.epoch + 1 };
     case 'LOAD_SUCCESS':
       if (action.epoch !== state.epoch) return state;
-      return { ...state, loading: false, load: 'ok', value: action.entity, errors: {} };
+      return { ...state, loading: false, load: 'ok', value: action.entity, baseline: action.entity, errors: {} };
     case 'LOAD_FAILURE':
       if (action.epoch !== state.epoch) return state;
       return { ...state, loading: false, load: 'error', errors: { __init: action.message } };
@@ -96,7 +112,7 @@ function entityFormReducer<E>(
       return { ...state, saving: true, epoch: state.epoch + 1 };
     case 'SAVE_SUCCESS':
       if (action.epoch !== state.epoch) return state;
-      return { ...state, value: action.entity, errors: {} };
+      return { ...state, value: action.entity, baseline: action.entity, errors: {} };
     case 'SAVE_FAILURE':
       if (action.epoch !== state.epoch) return state;
       return { ...state, errors: action.fieldErrors };
@@ -112,6 +128,7 @@ function entityFormReducer<E>(
 
 const INITIAL_STATE: EntityFormState<any> = {
   value: undefined,
+  baseline: undefined,
   loading: false,
   saving: false,
   errors: {},
@@ -122,7 +139,7 @@ const INITIAL_STATE: EntityFormState<any> = {
 // Internal hook — accepts generic E to type the returned entity shape.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function useEntityForm<E>(props: UseEntityFormProps) {
-  const { netexId, onSaved, onError } = props;
+  const { netexId, onSaved, onError, onChange, onDirtyChange } = props;
   // Ambient session inputs from the provider — the hook requires it (the
   // throw is intended). `dataOwnerRef` joins the load-effect deps below (an
   // org switch must re-fire every mounted load); `headers`/`getHeaders` stay
@@ -135,7 +152,8 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
     entityFormReducer<E>,
     INITIAL_STATE as EntityFormState<E>,
   );
-  const { value, errors, loading, saving, load } = state;
+  const { value, baseline, errors, loading, saving, load } = state;
+  const dirty = useMemo(() => isDirty(value, baseline), [value, baseline]);
 
   const setValue = useCallback(
     (v: E | undefined) => dispatch({ type: 'EDIT', value: v }),
@@ -173,6 +191,29 @@ useEffect(() => {
   useEffect(() => { headersRef.current = headers; }, [headers]);
   useEffect(() => { getHeadersRef.current = getHeaders; }, [getHeaders]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
+  // Same ref treatment for the observation callbacks: they fire from effects
+  // below, so an inline host arrow in the deps would re-fire on every render.
+  const onChangeRef = useRef(onChange);
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  useEffect(() => { onDirtyChangeRef.current = onDirtyChange; }, [onDirtyChange]);
+
+  // Report value/dirty transitions to the host. Both guard on the previous
+  // value so a re-render that did not move the form stays silent, and neither
+  // fires on mount (both start at the state they are initialised to).
+  const prevValue = useRef(value);
+  useEffect(() => {
+    if (prevValue.current === value) return;
+    prevValue.current = value;
+    onChangeRef.current?.(value);
+  }, [value]);
+
+  const prevDirty = useRef(dirty);
+  useEffect(() => {
+    if (prevDirty.current === dirty) return;
+    prevDirty.current = dirty;
+    onDirtyChangeRef.current?.(dirty);
+  }, [dirty]);
 
   // Resolve headers (static + dynamic) per request rather than into state.
   // Holding them in state made every inline `headers`/`getHeaders` literal mint a
@@ -303,5 +344,5 @@ useEffect(() => {
     }
   }, [value, client, resolveHeaders, dataOwnerRef, onSaved, onError]);
 
-  return { value, setValue, loading, saving, load, errors, handleSave };
+  return { value, setValue, loading, saving, load, dirty, errors, handleSave };
 }
