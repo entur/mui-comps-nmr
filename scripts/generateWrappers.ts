@@ -120,27 +120,44 @@ export const renderWrapperSource = (entry: ManifestEntry): string => {
     ].join('\n');
 };
 
+/**
+ * Emit the `formImpls/index.ts` barrel.
+ *
+ * Each entity contributes both its component and its props type: `src/index.ts`
+ * re-exports this barrel wholesale, so a type left out here is a type the host
+ * has to reconstruct with `ComponentProps<typeof …>`.
+ *
+ * @param manifest parsed `entities.manifest.json` entries
+ * @returns source of `src/EntityDetailsForm/formImpls/index.ts`
+ */
+export const renderBarrel = (manifest: ManifestEntry[]): string => {
+  const lines = manifest.flatMap(entry => {
+    const fileName = toCamel(entry.entity);
+    const compName = `${entry.entity}Form`;
+    return [
+      `export { ${compName} } from './${fileName}';`,
+      `export type { ${compName}Props } from './${fileName}';`,
+    ];
+  });
+  return [BANNER, ...lines, ''].join('\n');
+};
+
 const main = (): void => {
   const manifest: ManifestEntry[] = JSON.parse(readFileSync(resolve(MANIFEST), 'utf8'));
   mkdirSync(resolve(OUT_DIR), { recursive: true });
 
-  const exports: string[] = [];
-
   for (const entry of manifest) {
     const entityName = entry.entity;
     const fileName = toCamel(entityName);
-    const compName = `${entityName}Form`;
 
     const src = renderWrapperSource(entry);
 
     const outPath = resolve(OUT_DIR, `${fileName}.tsx`);
     writeFileSync(outPath, src);
     console.log(`[wrapper] ${entityName} → ${outPath}`);
-    exports.push(`export { ${compName} } from './${fileName}';`);
   }
 
-  const barrel = [BANNER, ...exports, ''].join('\n');
-  writeFileSync(resolve(OUT_DIR, 'index.ts'), barrel);
+  writeFileSync(resolve(OUT_DIR, 'index.ts'), renderBarrel(manifest));
   console.log(`[wrapper] wrote ${OUT_DIR}/index.ts`);
 };
 

@@ -8,7 +8,10 @@
 export { createAbstractEntityDetailsForm } from './EntityDetailsForm/abstractForm';
 export { SobekProvider, useSobekCtx } from './context/SobekContext';
 export type { SobekCtx } from './context/SobekContext';
-export { VehicleForm, VehicleTypeForm } from './EntityDetailsForm/formImpls';
+// Generated wrappers + their props types: VehicleTypeForm/VehicleTypeFormProps,
+// VehicleForm/VehicleFormProps. Re-exported wholesale rather than named, so a
+// new manifest entry reaches the public API the moment it is generated.
+export * from './EntityDetailsForm/formImpls';
 export type {
   EntityDetailsFormProps,
   EntityDetailsForm,
