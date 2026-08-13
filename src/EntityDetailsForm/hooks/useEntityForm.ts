@@ -49,7 +49,7 @@ export interface UseEntityFormProps extends EntityFormConfig {
   /**
    * Fired when the form crosses between clean and dirty. The baseline is the
    * entity the server last handed back (load or post-save refetch), compared
-   * under the empty-ish rule in `./dirty`.
+   * under the empty-ish rule in `../dirty`.
    */
   onDirtyChange?: (dirty: boolean) => void;
 }

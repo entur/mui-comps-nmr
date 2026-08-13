@@ -34,7 +34,7 @@ describe('renderWrapperSource', () => {
   it('declares the host observation callbacks on the props interface', () => {
     // Not passed to the presentation: they fall into `...rest` and reach
     // `useEntityForm`, which owns both the value and the baseline.
-    expect(src).toMatch(/onChange\?: \(value: Vehicle\) => void;/);
+    expect(src).toMatch(/onChange\?: \(value: Vehicle \| undefined\) => void;/);
     expect(src).toMatch(/onDirtyChange\?: \(dirty: boolean\) => void;/);
   });
 

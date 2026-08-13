@@ -442,8 +442,10 @@ describe('useEntityForm', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     // A host header must be able to show the loaded name without waiting for a
-    // keystroke, so this fires on the load, not only on user edits.
-    expect(onChange).toHaveBeenCalledWith(TRAM);
+    // keystroke, so this fires on the load, not only on user edits. Via waitFor
+    // like its siblings: the callback comes from a passive effect, not from the
+    // same read as `loading`.
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(TRAM));
   });
 
   it('reports each edit to onChange', async () => {
@@ -494,6 +496,24 @@ describe('useEntityForm', () => {
 
     expect(result.current.dirty).toBe(false);
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+
+  it('reports undefined to onChange when a load settles with no rows', async () => {
+    // Why `onChange` is typed `E | undefined`: switching a mounted form to an id
+    // that has no record leaves the host showing the previous record's values
+    // unless it hears about the miss.
+    const onChange = vi.fn();
+    mockFns.request
+      .mockResolvedValueOnce(envelope(TRAM))
+      .mockResolvedValueOnce({ vehicles: { content: [] } });
+
+    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1', onChange }));
+    await waitFor(() => expect(result.current.value).toBeDefined());
+
+    rerender(mkProps({ netexId: 'VEH:2', onChange }));
+
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(undefined));
   });
 
 });
