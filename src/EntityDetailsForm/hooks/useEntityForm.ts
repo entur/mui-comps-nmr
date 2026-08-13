@@ -88,7 +88,8 @@ type EntityFormAction<E> =
   | { type: 'SAVE_SUCCESS'; epoch: number; entity: E | undefined }
   | { type: 'SAVE_FAILURE'; epoch: number; fieldErrors: Record<string, string> }
   | { type: 'SAVE_SETTLED' } // release `saving` — deliberately never epoch-gated
-  | { type: 'EDIT'; value: E | undefined };
+  | { type: 'EDIT'; value: E | undefined }
+  | { type: 'RESET' }; // discard edits: value ← baseline
 
 function entityFormReducer<E>(
   state: EntityFormState<E>,
@@ -123,6 +124,12 @@ function entityFormReducer<E>(
       return { ...state, saving: false };
     case 'EDIT':
       return { ...state, value: action.value };
+    case 'RESET':
+      // Local discard — no epoch bump and no request: the baseline is already
+      // the server's last word, so a refetch would only re-fetch what we hold.
+      // Errors go with the edits that caused them; `__init` cannot be present
+      // here, since a failed load leaves no value to edit in the first place.
+      return { ...state, value: state.baseline, errors: {} };
   }
 }
 
@@ -159,6 +166,11 @@ export function useEntityForm<E>(props: UseEntityFormProps) {
     (v: E | undefined) => dispatch({ type: 'EDIT', value: v }),
     [],
   );
+
+  // Cancel an edit session in place. The alternative hosts use today — remount
+  // the form under a new `key` — throws away the loaded entity and re-fetches
+  // it; this restores the baseline the hook already holds.
+  const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
   const mounted = useRef(true);
 useEffect(() => {
@@ -344,5 +356,5 @@ useEffect(() => {
     }
   }, [value, client, resolveHeaders, dataOwnerRef, onSaved, onError]);
 
-  return { value, setValue, loading, saving, load, dirty, errors, handleSave };
+  return { value, setValue, reset, loading, saving, load, dirty, errors, handleSave };
 }

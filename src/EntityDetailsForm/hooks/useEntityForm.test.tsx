@@ -498,6 +498,70 @@ describe('useEntityForm', () => {
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 
+  it('reset discards edits back to the loaded entity', async () => {
+    mockFns.request.mockResolvedValueOnce(envelope(TRAM));
+    const onDirtyChange = vi.fn();
+
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onDirtyChange }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.setValue({ ...TRAM, name: { value: 'Edited' } } as any));
+    await waitFor(() => expect(result.current.dirty).toBe(true));
+
+    act(() => result.current.reset());
+
+    // In-place discard: no remount, so the host keeps its scroll position and
+    // the form does not re-fetch what it already has.
+    expect(result.current.value).toEqual(TRAM);
+    expect(result.current.dirty).toBe(false);
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
+    expect(mockFns.request).toHaveBeenCalledTimes(1);
+  });
+
+  it('reset reverts to the post-save baseline, not the originally loaded entity', async () => {
+    const saved = { netexId: 'VEH:1', name: { value: 'Tram Updated' } };
+    mockFns.request
+      .mockResolvedValueOnce(envelope(TRAM))
+      .mockResolvedValueOnce({ createOrUpdateVehicle: 'VEH:1' })
+      .mockResolvedValueOnce(envelope(saved));
+
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.setValue(saved as any));
+    await act(async () => result.current.handleSave());
+    await waitFor(() => expect(result.current.saving).toBe(false));
+
+    act(() => result.current.setValue({ ...saved, name: { value: 'Third' } } as any));
+    act(() => result.current.reset());
+
+    // Cancel means "back to what the server holds", which a save moved forward.
+    expect(result.current.value).toEqual(saved);
+    expect(result.current.dirty).toBe(false);
+  });
+
+  it('reset clears the errors a rejected save left behind', async () => {
+    mockFns.request
+      .mockResolvedValueOnce(envelope(TRAM))
+      .mockRejectedValueOnce({
+        response: {
+          errors: [{ message: 'too long', path: ['input', 'name'] }],
+        },
+      });
+
+    const { result } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.setValue({ ...TRAM, name: { value: 'Edited' } } as any));
+    await act(async () => result.current.handleSave());
+    await waitFor(() => expect(result.current.errors).not.toEqual({}));
+
+    act(() => result.current.reset());
+
+    // The messages describe values that no longer exist — leaving them inline
+    // marks the restored entity as invalid.
+    expect(result.current.errors).toEqual({});
+  });
 
   it('reports undefined to onChange when a load settles with no rows', async () => {
     // Why `onChange` is typed `E | undefined`: switching a mounted form to an id

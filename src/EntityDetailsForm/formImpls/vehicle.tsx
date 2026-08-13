@@ -3,6 +3,8 @@
 import { createAbstractEntityDetailsForm } from '../abstractForm';
 import { useEntityForm } from '../hooks/useEntityForm';
 import { useSobekCtx } from '../../context/SobekContext';
+import { EditFooter } from '../EditFooter';
+import type { EditFooterLabels } from '../EditFooter';
 import { FIELDS } from '../../entities/vehicle';
 import type { Entity as Vehicle } from '../../entities/vehicle';
 import { GetVehicleDocument, UpdateVehicleDocument } from '../../generated/operations/vehicle.generated';
@@ -24,17 +26,20 @@ export interface VehicleFormProps
   /** Fired when the form crosses between clean and dirty, against the entity
    *  the server last returned. */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Strings for the Save/Cancel footer. Defaults are English — this library
+   *  carries no i18n runtime, so localization is the host's job. */
+  footerLabels?: EditFooterLabels;
 }
 
 export function VehicleForm(props: VehicleFormProps) {
-  const { mode = 'edit', layout, variant, slotProps, netexId, ...rest } = props;
+  const { mode = 'edit', layout, variant, slotProps, netexId, footerLabels, ...rest } = props;
   // Display-only: renders the locked dataOwnerRef control. Overlaid on every
   // render, not just while `value` is undefined — otherwise the control keeps
   // showing the org that was current when the user first typed. The write
   // payload and the load filter read context inside the hook; this value
   // never reaches the server from here.
   const { dataOwnerRef } = useSobekCtx();
-  const { value, setValue, loading, saving, load, errors, handleSave } = useEntityForm<Vehicle>({
+  const { value, setValue, reset, loading, saving, load, dirty, errors, handleSave } = useEntityForm<Vehicle>({
     fields: FIELDS,
     query: {
       document: GetVehicleDocument,
@@ -74,8 +79,17 @@ export function VehicleForm(props: VehicleFormProps) {
         errors={errors}
         disabled={loading || saving}
       />
+      {/* Inert until the form diverges from the server, so Cancel cannot
+          discard nothing and Save cannot re-send an unchanged entity. */}
       {mode === 'edit' && (
-        <button onClick={handleSave} disabled={saving}>Save</button>
+        <EditFooter
+          dirty={dirty}
+          saving={saving}
+          disabled={loading}
+          onSave={handleSave}
+          onCancel={reset}
+          labels={footerLabels}
+        />
       )}
     </>
   );

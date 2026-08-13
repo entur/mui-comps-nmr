@@ -70,6 +70,21 @@ reading as edits. `0` is deliberately not empty. Both callbacks reach the hook
 through the generated wrapper's `...rest`, so the generator only declares them
 on `<Entity>FormProps` — nothing else in the template changes.
 
+**Edit session.** In `mode='edit'` the wrapper renders `EditFooter`
+(`src/EntityDetailsForm/EditFooter.tsx`) rather than a bare Save button: a
+status line plus Cancel/Save, all three **inert until `dirty`** — so Save can't
+re-send an unchanged entity and Cancel can't discard nothing. Both actions also
+lock while `saving` (a discard mid-flight would restore a baseline the in-flight
+request is about to replace). Cancel is the hook's `reset()` — a `RESET` action
+setting `value ← baseline` and clearing `errors`, with no epoch bump and no
+request. That replaces the host-side remount-under-a-new-`key` idiom, which
+threw away the loaded entity and re-fetched it; the `key` remount is still the
+way to switch *records*. `footerLabels` (`EditFooterLabels`) localizes every
+string — defaults are English, since there is no i18n runtime here.
+`EditFooter` and `SaveSnackbar` are exported presentational components holding
+no state, so a host driving the presentational form directly (or rendering its
+own chrome from `onSaved`/`onError`) uses the same pieces.
+
 - `mode` `'view' | 'edit'` — view disables inputs.
 - `layout?` — whitelist of sections (`{ Section: [fields] }`). Omitted field not
   rendered but value round-trips via `onChange` (loss-free). Omit layout → flat.
