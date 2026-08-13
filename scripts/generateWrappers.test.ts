@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderWrapperSource } from './generateWrappers';
+import { renderWrapperSource, renderBarrel } from './generateWrappers';
 
 const entry = {
   entity: 'Vehicle',
@@ -50,5 +50,14 @@ describe('renderWrapperSource', () => {
     // user first typed, while the save stamps whatever context holds now.
     expect(src).toMatch(/value=\{\{ \.\.\.\(value \?\? \(\{\} as Vehicle\)\), dataOwnerRef \}\}/);
     expect(src).toMatch(/import \{ useSobekCtx \} from '\.\.\/\.\.\/context\/SobekContext';/);
+  });
+});
+
+describe('renderBarrel', () => {
+  it('re-exports each wrapper component and its props type', () => {
+    const out = renderBarrel([entry]);
+    expect(out).toMatch(/export \{ VehicleForm \} from '\.\/vehicle';/);
+    // Hosts otherwise reconstruct these with `ComponentProps<typeof VehicleForm>`.
+    expect(out).toMatch(/export type \{ VehicleFormProps \} from '\.\/vehicle';/);
   });
 });
