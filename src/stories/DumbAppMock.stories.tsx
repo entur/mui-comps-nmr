@@ -15,10 +15,10 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { alpha } from "@mui/material/styles";
 import CloseIcon from "@mui/icons-material/Close";
 import {
   createAbstractEntityDetailsForm,
+  EditFooter,
   vehicleFields,
   vehicleTypeFields,
   type Vehicle,
@@ -325,10 +325,10 @@ const AppMock = () => {
 
 /**
  * Save-or-cancel variant: the Drawer becomes a full-height shell — titled
- * header · scrolling form · a sticky action footer that stays dormant until the
- * form is dirty, then wakes (amber pulsing status dot, live label, active
- * Save/Cancel). Dirtiness is tracked per entity via `useEditable`; the form
- * factory itself knows nothing of save — that's the host's concern.
+ * header · scrolling form · the library's `EditFooter`, dormant until the form
+ * is dirty. Dirtiness is tracked per entity via `useEditable`: the form factory
+ * knows nothing of save, so on this presentational path the host still owns the
+ * baseline (the data-aware wrappers get theirs from `useEntityForm`).
  */
 const SaveOrCancelMock = () => {
   const [open, setOpen] = useState<Flavour>(null);
@@ -410,113 +410,16 @@ const SaveOrCancelMock = () => {
               )}
             </Box>
 
-            {/* Sticky action footer: dormant when clean, lit when dirty. */}
-            <Box
-              sx={{
-                flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-                gap: 1.5,
-                px: { xs: 2, sm: 3 },
-                py: 1.5,
-                borderTop: 1,
-                borderColor: dirty ? "warning.main" : "divider",
-                bgcolor: (theme) =>
-                  dirty
-                    ? alpha(theme.palette.warning.main, 0.08)
-                    : "background.paper",
-                boxShadow: dirty
-                  ? "0 -10px 28px -20px rgba(0,0,0,0.55)"
-                  : "none",
-                transition: (theme) =>
-                  theme.transitions.create(
-                    ["background-color", "border-color", "box-shadow"],
-                    {
-                      duration: theme.transitions.duration.short,
-                    },
-                  ),
-              }}
-            >
-              {/* Status: pulsing dot + live label. */}
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <Box
-                  sx={{
-                    position: "relative",
-                    width: 8,
-                    height: 8,
-                    display: "inline-flex",
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      bgcolor: dirty ? "warning.main" : "success.light",
-                      transition: (theme) =>
-                        theme.transitions.create("background-color"),
-                    }}
-                  />
-                  {dirty && (
-                    <Box
-                      sx={{
-                        position: "absolute",
-                        inset: 0,
-                        borderRadius: "50%",
-                        bgcolor: "warning.main",
-                        animation: "soPulse 1.6s ease-out infinite",
-                        "@keyframes soPulse": {
-                          "0%": { transform: "scale(1)", opacity: 0.6 },
-                          "70%, 100%": { transform: "scale(2.8)", opacity: 0 },
-                        },
-                      }}
-                    />
-                  )}
-                </Box>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: dirty ? "warning.dark" : "text.secondary",
-                    fontWeight: 500,
-                  }}
-                >
-                  {dirty ? "Unsaved changes" : "All changes saved"}
-                </Typography>
-              </Stack>
-
-              <Stack direction="row" spacing={1}>
-                <Button
-                  variant="outlined"
-                  color="inherit"
-                  size="small"
-                  disabled={!dirty}
-                  onClick={() => active?.cancel()}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="contained"
-                  size="small"
-                  disabled={!dirty}
-                  onClick={() => active?.save()}
-                  sx={
-                    dirty
-                      ? {
-                          animation: "saveGlow 2.4s ease-in-out infinite",
-                          "@keyframes saveGlow": {
-                            "0%, 100%": { boxShadow: 1 },
-                            "50%": { boxShadow: 6 },
-                          },
-                        }
-                      : undefined
-                  }
-                >
-                  Save
-                </Button>
-              </Stack>
-            </Box>
+            {/* The library's own footer, driven by host-owned state: these are
+              presentational forms, so `dirty`/save/cancel come from `useEditable`
+              rather than from `useEntityForm`. Same component the data-aware
+              wrappers render for themselves. */}
+            <EditFooter
+              dirty={dirty}
+              onSave={() => active?.save()}
+              onCancel={() => active?.cancel()}
+              sx={{ flexShrink: 0 }}
+            />
           </Box>
         </Drawer>
       }
