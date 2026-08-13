@@ -24,6 +24,9 @@ Precedent:
   (runtime behaviour change, no API change).
 - `8a2d280` 0.4.0 → 0.5.0 — new API surface: exported wrapper props types (#24)
   and `onChange` / `onDirtyChange` (#25).
+- `e0df6d9` 0.5.0 → 0.6.0 — built-in Save/Cancel footer (#26). New API
+  (`footerProps`, exported `EditFooter`/`SaveSnackbar`) *and* a behaviour
+  change: Save is inert on an unchanged form.
 
 ## Steps
 
@@ -115,3 +118,24 @@ gh release view v<new>                             # asset entur-mui-comps-nmr-<
 The doc edit opens a 404 window: the install URLs name a release that does not
 exist until the workflow finishes. Confirm one URL resolves before telling
 anyone to upgrade.
+
+```bash
+curl -sL -o /dev/null -w "%{http_code}\n" \
+  "https://github.com/entur/mui-comps-nmr/releases/download/v<new>/entur-mui-comps-nmr-<new>.tgz"
+curl -s https://entur.github.io/mui-comps-nmr/guide.html | grep -c "v<new>"
+```
+
+## Sequencing a release that documents new behaviour
+
+`pages.yml` republishes `docs/using-entity-forms-host-guide.html` to
+`/guide.html` on **every push to main**, but the guide's install URL pins a
+tarball. So merging a PR that rewrites the guide, and cutting the release,
+have to happen in one window — otherwise the published guide describes a
+version nobody can install yet. Merge, bump, tag, then verify both the asset
+URL and the live guide (above). Holding the guide PR as a draft until the
+feature merges, as #31 did, is the other half of the same rule.
+
+**`tsc` exit codes through a pipe.** `npx tsc --noEmit | grep -v "npm notice"`
+reports *grep's* status, so a clean run looks like `exit=1` and a broken one can
+look clean. Run `./node_modules/.bin/tsc --noEmit -p tsconfig.json` and read its
+own code. Editor diagnostics also lag a scripted edit by a beat — believe tsc.
