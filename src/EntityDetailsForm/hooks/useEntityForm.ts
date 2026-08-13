@@ -124,12 +124,18 @@ function entityFormReducer<E>(
       return { ...state, saving: false };
     case 'EDIT':
       return { ...state, value: action.value };
-    case 'RESET':
+    case 'RESET': {
       // Local discard — no epoch bump and no request: the baseline is already
       // the server's last word, so a refetch would only re-fetch what we hold.
-      // Errors go with the edits that caused them; `__init` cannot be present
-      // here, since a failed load leaves no value to edit in the first place.
-      return { ...state, value: state.baseline, errors: {} };
+      // Errors go with the edits that caused them, except `__init`: a *re*load
+      // (netexId switch, org switch) fails without clearing the entity already
+      // on screen, so a load error can coexist with an editable value. It
+      // describes the record, not the edit session, and `load` stays 'error'
+      // with consumers rendering that message — dropping it here would leave
+      // them rendering an empty error.
+      const { __init } = state.errors;
+      return { ...state, value: state.baseline, errors: __init ? { __init } : {} };
+    }
   }
 }
 

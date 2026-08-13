@@ -77,7 +77,11 @@ re-send an unchanged entity and Cancel can't discard nothing. Both actions also
 lock while `saving` (a discard mid-flight would restore a baseline the in-flight
 request is about to replace). Cancel is the hook's `reset()` — a `RESET` action
 setting `value ← baseline` and clearing `errors`, with no epoch bump and no
-request. That replaces the host-side remount-under-a-new-`key` idiom, which
+request. It keeps `errors.__init` though: `LOAD_FAILURE` does **not** clear
+`value`, so a failed *re*load (netexId or org switch) leaves a load error beside
+an editable entity, and `load` stays `'error'` with consumers rendering that
+message — discarding it with the edits would leave them rendering an empty
+error. That replaces the host-side remount-under-a-new-`key` idiom, which
 threw away the loaded entity and re-fetched it; the `key` remount is still the
 way to switch *records*. The band is **sticky, so its own `backgroundColor`
 stays opaque** (`background.paper`) and the dirty tint rides on top as a flat

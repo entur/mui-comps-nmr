@@ -563,6 +563,29 @@ describe('useEntityForm', () => {
     expect(result.current.errors).toEqual({});
   });
 
+  it('reset keeps a load error, which outlives the edits it did not come from', async () => {
+    mockFns.request
+      .mockResolvedValueOnce(envelope(TRAM))
+      .mockRejectedValueOnce(new Error('boom'));
+
+    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    await waitFor(() => expect(result.current.value).toEqual(TRAM));
+
+    // A *re*load — switching netexId, or an org switch — fails without clearing
+    // the entity already on screen, so `__init` and a value do coexist.
+    rerender(mkProps({ netexId: 'VEH:2' }));
+    await waitFor(() => expect(result.current.load).toBe('error'));
+    expect(result.current.value).toEqual(TRAM);
+
+    act(() => result.current.reset());
+
+    // `load` stays 'error' and consumers render `errors.__init` for that phase:
+    // dropping the message with the edits would leave them rendering an empty
+    // error. A failed load is a fact about the record, not the edit session.
+    expect(result.current.load).toBe('error');
+    expect(result.current.errors.__init).toBe('Failed to load');
+  });
+
   it('reports undefined to onChange when a load settles with no rows', async () => {
     // Why `onChange` is typed `E | undefined`: switching a mounted form to an id
     // that has no record leaves the host showing the previous record's values

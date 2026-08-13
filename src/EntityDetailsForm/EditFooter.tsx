@@ -19,7 +19,7 @@ const PULSE_KEYFRAMES = 'nmrEditFooterPulse';
 // Tint strength for the dirty footer band.
 const DIRTY_TINT = 0.08;
 
-/** Every user-visible string, so a host can localize without a i18n dep here. */
+/** Every user-visible string, so a host can localize without an i18n dep here. */
 export interface EditFooterLabels {
   save?: string;
   cancel?: string;
