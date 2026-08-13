@@ -38,6 +38,27 @@ describe('renderWrapperSource', () => {
     expect(src).toMatch(/onDirtyChange\?: \(dirty: boolean\) => void;/);
   });
 
+  it('renders the dirty-gated action footer in place of the bare Save button', () => {
+    expect(src).toMatch(/import \{ EditFooter \} from '\.\.\/EditFooter';/);
+    expect(src).not.toMatch(/<button onClick=\{handleSave\}/);
+    expect(src).toMatch(/dirty=\{dirty\}/);
+    expect(src).toMatch(/onSave=\{handleSave\}/);
+    // Cancel is the hook's in-place discard, not a remount — the wrapper owns
+    // no `key` of its own and cannot re-mount itself.
+    expect(src).toMatch(/onCancel=\{reset\}/);
+    expect(src).toMatch(/const \{ value, setValue, reset, loading, saving, load, dirty, errors, handleSave \}/);
+  });
+
+  it('exposes the footer to the host for labels and styling', () => {
+    // The wrapper renders the footer itself, so without a passthrough a host
+    // can neither localize it (English defaults, no i18n runtime here) nor theme
+    // it. `EditFooterHostProps` omits the state the hook owns.
+    expect(src).toMatch(/footerProps\?: EditFooterHostProps;/);
+    // Spread before the controlled props: the type already forbids overriding
+    // them, but the order makes it true at runtime too.
+    expect(src).toMatch(/<EditFooter\s+\{\.\.\.footerProps\}\s+dirty=\{dirty\}/);
+  });
+
   it('gates not-found on the settled load phase, never on `loading`', () => {
     // `loading` is false on the first commit (LOAD_START fires from a passive
     // effect), so a not-found branch gated on it flashes on every mount.

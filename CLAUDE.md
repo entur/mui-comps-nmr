@@ -70,6 +70,31 @@ reading as edits. `0` is deliberately not empty. Both callbacks reach the hook
 through the generated wrapper's `...rest`, so the generator only declares them
 on `<Entity>FormProps` — nothing else in the template changes.
 
+**Edit session.** In `mode='edit'` the wrapper renders `EditFooter`
+(`src/EntityDetailsForm/EditFooter.tsx`) rather than a bare Save button: a
+status line plus Cancel/Save, all three **inert until `dirty`** — so Save can't
+re-send an unchanged entity and Cancel can't discard nothing. Both actions also
+lock while `saving` (a discard mid-flight would restore a baseline the in-flight
+request is about to replace). Cancel is the hook's `reset()` — a `RESET` action
+setting `value ← baseline` and clearing `errors`, with no epoch bump and no
+request. It keeps `errors.__init` though: `LOAD_FAILURE` does **not** clear
+`value`, so a failed *re*load (netexId or org switch) leaves a load error beside
+an editable entity, and `load` stays `'error'` with consumers rendering that
+message — discarding it with the edits would leave them rendering an empty
+error. That replaces the host-side remount-under-a-new-`key` idiom, which
+threw away the loaded entity and re-fetched it; the `key` remount is still the
+way to switch *records*. The band is **sticky, so its own `backgroundColor`
+stays opaque** (`background.paper`) and the dirty tint rides on top as a flat
+`linear-gradient` — an `alpha()` colour there is 92% see-through and the fields
+scroll visibly through the buttons. Host reach: `footerProps`
+(`EditFooterHostProps` = `EditFooterProps` minus the state the hook owns) carries
+`labels` (English defaults, no i18n runtime here), `slotProps` (per-button MUI
+overrides, applied *before* the controlled `disabled`/`onClick`) and `sx`
+(applied after every default, so `backgroundImage: 'none'` drops the tint).
+`EditFooter` and `SaveSnackbar` are exported presentational components holding
+no state, so a host driving the presentational form directly (or rendering its
+own chrome from `onSaved`/`onError`) uses the same pieces.
+
 - `mode` `'view' | 'edit'` — view disables inputs.
 - `layout?` — whitelist of sections (`{ Section: [fields] }`). Omitted field not
   rendered but value round-trips via `onChange` (loss-free). Omit layout → flat.

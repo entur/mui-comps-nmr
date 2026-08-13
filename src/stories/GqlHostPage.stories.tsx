@@ -1,7 +1,6 @@
 import { useMemo, useState, type FC } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
-  Alert,
   Box,
   Button,
   Divider,
@@ -11,17 +10,18 @@ import {
   ListItemText,
   ListSubheader,
   Paper,
-  Snackbar,
   Stack,
   Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import {
+  SaveSnackbar,
   VehicleForm,
   VehicleTypeForm,
   type Layout,
   type LayoutVariant,
   type ControlSlotProps,
+  type SaveToast,
 } from "../index";
 import { vehicleSeed, vehicleTypeSeed } from "./initDataSets";
 import { vehicleLayout, vehicleTypeLayout } from "./initLayouts";
@@ -33,9 +33,11 @@ import { installStoriesMock } from "./mockEndpoint";
  * against an in-browser mock endpoint. Two stacked record lists — Vehicle types
  * and Vehicles — share one detail pane: clicking an item in either list
  * activates that entity's form. Reproduces the host-guide "complete host
- * page" (list → select → view/edit → save) with one addition over that snippet:
- * a live status surface (Snackbar on onSaved/onError) so the async save
- * lifecycle the guide only describes in prose is actually visible.
+ * page" (list → select → view/edit → save), and shows the parts the guide only
+ * describes in prose: `SaveSnackbar` fed from onSaved/onError, and
+ * `onDirtyChange` gating the exit from edit mode. Discard is not the page's job
+ * any more — the form renders its own `EditFooter`, whose Cancel restores the
+ * loaded entity without the remount this page used to do.
  */
 
 // Serve both seeds before any story renders (module scope beats effect ordering).
@@ -94,9 +96,6 @@ type entity = "vehicleType" | "vehicle";
 /** A selected record; `netexId` omitted ⇒ a blank "new" form of that entity. */
 type Selection = { entity: entity; netexId?: string };
 
-/** Snackbar payload: a message plus which severity to colour it. */
-type Toast = { msg: string; severity: "success" | "error" };
-
 /** The data-aware form props this page drives — VehicleForm and VehicleTypeForm
  *  share one shape (layout is the base `Layout`, not entity-specific). */
 type DataAwareForm = FC<{
@@ -107,6 +106,7 @@ type DataAwareForm = FC<{
   layout?: Layout;
   onSaved?: (netexId: string) => void;
   onError?: (generalErrors: string[]) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }>;
 
 /** Minimal record shape the lists need from either entity. */
@@ -161,17 +161,15 @@ const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
     netexId: "VEH:Vehicle:701",
   });
   const [mode, setMode] = useState<"view" | "edit">("view");
-  // Bumping this remounts the form (via `key`) → reload a clean copy = "cancel".
-  const [rev, setRev] = useState(0);
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [toast, setToast] = useState<SaveToast | null>(null);
+  // Reported by the form itself — the host no longer diffs anything to know
+  // whether leaving edit mode would lose work.
+  const [dirty, setDirty] = useState(false);
 
   const selectRecord = (entity: entity, netexId?: string) => {
     setSelection({ entity, netexId });
+    setDirty(false); // the new record's form reports its own state on mount
     setMode(netexId ? "view" : "edit"); // existing → view; new → straight to edit
-  };
-  const cancel = () => {
-    setRev((r) => r + 1); // discard edits by reloading
-    setMode("view");
   };
 
   const active = selection ? ENTITY[selection.entity] : null;
@@ -263,9 +261,22 @@ const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
                   Edit
                 </Button>
               ) : (
-                <Button color="inherit" onClick={cancel}>
-                  Cancel
-                </Button>
+                // Discard now lives in the form's own footer, so the page only
+                // has to refuse the exit while there is something to lose. The
+                // hint sits on a wrapper: MUI gives `.Mui-disabled` a
+                // `pointer-events: none` (ButtonBase), so a `title` on the
+                // button itself would never surface — exactly when it is needed.
+                <span
+                  title={dirty ? "Save or cancel your changes first" : undefined}
+                >
+                  <Button
+                    color="inherit"
+                    disabled={dirty}
+                    onClick={() => setMode("view")}
+                  >
+                    Done
+                  </Button>
+                </span>
               )}
             </Stack>
 
@@ -274,13 +285,16 @@ const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
               sx={{ p: { xs: 2, sm: 3 }, maxWidth: 680 }}
             >
               <Form
-                // New key ⇒ remount: clean entity/record switch + discard on cancel.
-                key={`${selection.entity}:${selection.netexId ?? NEW_KEY}:${rev}`}
+                // New key ⇒ remount, for switching entity/record only. Discarding
+                // edits no longer needs one: the footer's Cancel restores the
+                // hook's baseline in place, with no second round trip.
+                key={`${selection.entity}:${selection.netexId ?? NEW_KEY}`}
                 netexId={selection.netexId}
                 mode={mode}
                 variant={variant}
                 slotProps={slotProps}
                 layout={active.layout}
+                onDirtyChange={setDirty}
                 onSaved={(id) => {
                   setSelection({ entity: selection.entity, netexId: id });
                   setMode("view");
@@ -302,22 +316,7 @@ const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
         )}
       </Box>
 
-      <Snackbar
-        open={toast !== null}
-        autoHideDuration={3000}
-        onClose={() => setToast(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        {toast ? (
-          <Alert
-            severity={toast.severity}
-            variant="filled"
-            onClose={() => setToast(null)}
-          >
-            {toast.msg}
-          </Alert>
-        ) : undefined}
-      </Snackbar>
+      <SaveSnackbar toast={toast} onClose={() => setToast(null)} />
     </Paper>
   );
 };

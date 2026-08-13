@@ -43,6 +43,41 @@ interface WrapperProps {
 
 const camel = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
 
+// Kinds these tests know how to drive from the keyboard/mouse. Widening this
+// union without adding the matching LOADED/EDITED entries is a compile error,
+// which is the point: the suite is manifest-driven, so a kind it cannot drive
+// has to fail loudly rather than type-check and then edit `undefined` into a
+// control. Restricted to top-level paths so a loaded row is a flat literal.
+type Drivable = Extract<FieldSpec['kind'], 'text' | 'number' | 'switch'>;
+/** The drivable kinds driven by typing rather than clicking. */
+type Typed = Exclude<Drivable, 'switch'>;
+
+const DRIVABLE: Drivable[] = ['text', 'number', 'switch'];
+
+/** Value to seed a loaded row with, per drivable kind. */
+const LOADED: Record<Drivable, unknown> = { text: 'Loaded', number: 7, switch: false };
+/** Value the edit moves it to — must differ from LOADED under `dirty.ts`. */
+const EDITED: Record<Typed, string> = { text: 'Edited', number: '42' };
+
+const isDrivableKind = (k: FieldSpec['kind']): k is Drivable =>
+  (DRIVABLE as FieldSpec['kind'][]).includes(k);
+
+/** Is this a field the tests can both seed and edit? */
+const isDrivable = (f: FieldSpec): f is FieldSpec & { kind: Drivable } =>
+  !f.serverManaged && !f.locked && f.path.length === 1 && isDrivableKind(f.kind);
+
+/**
+ * Type into (or toggle) one rendered control.
+ *
+ * @param kind  the field's control kind
+ * @param label the control's visible label
+ */
+const editControl = (kind: Drivable, label: string): void => {
+  const input = screen.getByLabelText(label);
+  if (kind === 'switch') fireEvent.click(input);
+  else fireEvent.change(input, { target: { value: EDITED[kind] } });
+};
+
 const manifest: ManifestEntry[] = JSON.parse(readFileSync(resolve(MANIFEST), 'utf8'));
 
 const mockFns = vi.hoisted(() => ({
@@ -148,17 +183,41 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
       k => !fields[k].serverManaged && !fields[k].locked && !(fields[k].path[0] in mask)
     );
 
-    it.runIf(patchOnly.length)('saves no patch-only field', async () => {
-      const row = {
-        netexId: NETEX_ID,
-        ...Object.fromEntries(patchOnly.map(k => [fields[k].path[0], 'x'])),
-      };
+    // Fields these tests can seed and then edit — the footer is inert until the
+    // form is dirty, so anything that clicks Save has to move a control first.
+    const editable = Object.keys(fields).filter(k => isDrivable(fields[k]));
+    const seed = (keys: string[]) =>
+      Object.fromEntries(
+        keys.map(k => {
+          const { kind, path } = fields[k];
+          // Non-drivable kinds are only ever seeded, never edited, so any
+          // non-empty value will do for them.
+          return [path[0], isDrivableKind(kind) ? LOADED[kind] : 'x'];
+        })
+      );
+
+    /** Narrow a field the caller believes is drivable, or say so out loud. */
+    const drivable = (key: string): FieldSpec & { kind: Drivable } => {
+      const f = fields[key];
+      if (!isDrivable(f)) throw new Error(`${entry.entity}.${key} is not drivable`);
+      return f;
+    };
+
+    it.runIf(patchOnly.length && editable.length)('saves no patch-only field', async () => {
+      const row = { netexId: NETEX_ID, ...seed(patchOnly) };
       mockFns.request
         .mockResolvedValueOnce(rows([row]))
         .mockResolvedValueOnce({ [entry.mutationName]: NETEX_ID })
         .mockResolvedValueOnce(rows([row]));
 
       render(<Form netexId={NETEX_ID} />, { wrapper });
+      await waitFor(() => expect(screen.getByLabelText(humanize('netexId'))).toBeEnabled());
+
+      // Edit a patch-only field where one is drivable: proves the field is
+      // genuinely editable in the form and still stripped at the wire edge.
+      const driver = patchOnly.find(k => isDrivable(fields[k])) ?? editable[0];
+      editControl(drivable(driver).kind, humanize(driver));
+
       await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -167,6 +226,48 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
       const sent = Object.keys((vars as { input: Record<string, unknown> }).input);
       expect(sent).not.toHaveLength(0);
       expect(sent.filter(k => !(k in mask))).toEqual([]);
+    });
+
+    it.runIf(editable.length)(
+      'keeps the footer inert until an edit, then wakes both actions',
+      async () => {
+        const key = editable[0];
+        mockFns.request.mockResolvedValueOnce(rows([{ netexId: NETEX_ID, ...seed([key]) }]));
+
+        render(<Form netexId={NETEX_ID} />, { wrapper });
+        await waitFor(() => expect(screen.getByLabelText(humanize(key))).toBeEnabled());
+
+        // Nothing to save and nothing to discard on a freshly loaded record.
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+
+        editControl(drivable(key).kind, humanize(key));
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+      }
+    );
+
+    it.runIf(editable.length)('discards edits in place on Cancel, without refetching', async () => {
+      const key = editable[0];
+      const kind = drivable(key).kind;
+      mockFns.request.mockResolvedValueOnce(rows([{ netexId: NETEX_ID, ...seed([key]) }]));
+
+      render(<Form netexId={NETEX_ID} />, { wrapper });
+      await waitFor(() => expect(screen.getByLabelText(humanize(key))).toBeEnabled());
+
+      editControl(kind, humanize(key));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      // Restored from the hook's baseline — the host's alternative (remount
+      // under a new `key`) would cost a second round trip for data we hold.
+      const input = screen.getByLabelText(humanize(key)) as HTMLInputElement;
+      if (kind === 'switch') expect(input.checked).toBe(LOADED.switch);
+      else expect(input.value).toBe(String(LOADED[kind]));
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+      expect(mockFns.request).toHaveBeenCalledTimes(1);
     });
 
     it('forwards the loaded entity to the host via onChange', async () => {
