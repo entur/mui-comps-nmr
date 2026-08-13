@@ -43,18 +43,28 @@ interface WrapperProps {
 
 const camel = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
 
-// Kinds these tests know how to drive from the keyboard/mouse. Restricted to
-// top-level paths so a loaded row for the field is a flat literal.
-const DRIVABLE: FieldSpec['kind'][] = ['text', 'number', 'switch'];
+// Kinds these tests know how to drive from the keyboard/mouse. Widening this
+// union without adding the matching LOADED/EDITED entries is a compile error,
+// which is the point: the suite is manifest-driven, so a kind it cannot drive
+// has to fail loudly rather than type-check and then edit `undefined` into a
+// control. Restricted to top-level paths so a loaded row is a flat literal.
+type Drivable = Extract<FieldSpec['kind'], 'text' | 'number' | 'switch'>;
+/** The drivable kinds driven by typing rather than clicking. */
+type Typed = Exclude<Drivable, 'switch'>;
+
+const DRIVABLE: Drivable[] = ['text', 'number', 'switch'];
 
 /** Value to seed a loaded row with, per drivable kind. */
-const LOADED: Record<string, unknown> = { text: 'Loaded', number: 7, switch: false };
+const LOADED: Record<Drivable, unknown> = { text: 'Loaded', number: 7, switch: false };
 /** Value the edit moves it to — must differ from LOADED under `dirty.ts`. */
-const EDITED: Record<string, string> = { text: 'Edited', number: '42' };
+const EDITED: Record<Typed, string> = { text: 'Edited', number: '42' };
+
+const isDrivableKind = (k: FieldSpec['kind']): k is Drivable =>
+  (DRIVABLE as FieldSpec['kind'][]).includes(k);
 
 /** Is this a field the tests can both seed and edit? */
-const isDrivable = (f: FieldSpec): boolean =>
-  !f.serverManaged && !f.locked && f.path.length === 1 && DRIVABLE.includes(f.kind);
+const isDrivable = (f: FieldSpec): f is FieldSpec & { kind: Drivable } =>
+  !f.serverManaged && !f.locked && f.path.length === 1 && isDrivableKind(f.kind);
 
 /**
  * Type into (or toggle) one rendered control.
@@ -62,7 +72,7 @@ const isDrivable = (f: FieldSpec): boolean =>
  * @param kind  the field's control kind
  * @param label the control's visible label
  */
-const editControl = (kind: FieldSpec['kind'], label: string): void => {
+const editControl = (kind: Drivable, label: string): void => {
   const input = screen.getByLabelText(label);
   if (kind === 'switch') fireEvent.click(input);
   else fireEvent.change(input, { target: { value: EDITED[kind] } });
@@ -177,7 +187,21 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
     // form is dirty, so anything that clicks Save has to move a control first.
     const editable = Object.keys(fields).filter(k => isDrivable(fields[k]));
     const seed = (keys: string[]) =>
-      Object.fromEntries(keys.map(k => [fields[k].path[0], LOADED[fields[k].kind] ?? 'x']));
+      Object.fromEntries(
+        keys.map(k => {
+          const { kind, path } = fields[k];
+          // Non-drivable kinds are only ever seeded, never edited, so any
+          // non-empty value will do for them.
+          return [path[0], isDrivableKind(kind) ? LOADED[kind] : 'x'];
+        })
+      );
+
+    /** Narrow a field the caller believes is drivable, or say so out loud. */
+    const drivable = (key: string): FieldSpec & { kind: Drivable } => {
+      const f = fields[key];
+      if (!isDrivable(f)) throw new Error(`${entry.entity}.${key} is not drivable`);
+      return f;
+    };
 
     it.runIf(patchOnly.length && editable.length)('saves no patch-only field', async () => {
       const row = { netexId: NETEX_ID, ...seed(patchOnly) };
@@ -192,7 +216,7 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
       // Edit a patch-only field where one is drivable: proves the field is
       // genuinely editable in the form and still stripped at the wire edge.
       const driver = patchOnly.find(k => isDrivable(fields[k])) ?? editable[0];
-      editControl(fields[driver].kind, humanize(driver));
+      editControl(drivable(driver).kind, humanize(driver));
 
       await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -217,7 +241,7 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
         expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
 
-        editControl(fields[key].kind, humanize(key));
+        editControl(drivable(key).kind, humanize(key));
 
         await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
         expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
@@ -226,7 +250,7 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
 
     it.runIf(editable.length)('discards edits in place on Cancel, without refetching', async () => {
       const key = editable[0];
-      const kind = fields[key].kind;
+      const kind = drivable(key).kind;
       mockFns.request.mockResolvedValueOnce(rows([{ netexId: NETEX_ID, ...seed([key]) }]));
 
       render(<Form netexId={NETEX_ID} />, { wrapper });

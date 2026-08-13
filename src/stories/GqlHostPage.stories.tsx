@@ -262,15 +262,21 @@ const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
                 </Button>
               ) : (
                 // Discard now lives in the form's own footer, so the page only
-                // has to refuse the exit while there is something to lose.
-                <Button
-                  color="inherit"
-                  disabled={dirty}
+                // has to refuse the exit while there is something to lose. The
+                // hint sits on a wrapper: MUI gives `.Mui-disabled` a
+                // `pointer-events: none` (ButtonBase), so a `title` on the
+                // button itself would never surface — exactly when it is needed.
+                <span
                   title={dirty ? "Save or cancel your changes first" : undefined}
-                  onClick={() => setMode("view")}
                 >
-                  Done
-                </Button>
+                  <Button
+                    color="inherit"
+                    disabled={dirty}
+                    onClick={() => setMode("view")}
+                  >
+                    Done
+                  </Button>
+                </span>
               )}
             </Stack>
 
