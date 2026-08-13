@@ -13,7 +13,12 @@ export type { SobekCtx } from './context/SobekContext';
 // the save feedback the wrappers only report through `onSaved` / `onError`.
 export { EditFooter } from './EntityDetailsForm/EditFooter';
 export { SaveSnackbar } from './EntityDetailsForm/SaveSnackbar';
-export type { EditFooterProps, EditFooterLabels } from './EntityDetailsForm/EditFooter';
+export type {
+  EditFooterProps,
+  EditFooterLabels,
+  EditFooterSlotProps,
+  EditFooterHostProps,
+} from './EntityDetailsForm/EditFooter';
 export type { SaveSnackbarProps, SaveToast } from './EntityDetailsForm/SaveSnackbar';
 // Generated wrappers + their props types: VehicleTypeForm/VehicleTypeFormProps,
 // VehicleForm/VehicleFormProps. Re-exported wholesale rather than named, so a

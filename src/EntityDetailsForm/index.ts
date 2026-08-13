@@ -5,7 +5,7 @@ export { createAbstractEntityDetailsForm } from './abstractForm';
 export { useEntityForm } from './hooks/useEntityForm';
 export { EditFooter } from './EditFooter';
 export { SaveSnackbar } from './SaveSnackbar';
-export type { EditFooterProps, EditFooterLabels } from './EditFooter';
+export type { EditFooterProps, EditFooterLabels, EditFooterSlotProps, EditFooterHostProps } from './EditFooter';
 export type { SaveSnackbarProps, SaveToast } from './SaveSnackbar';
 export { toInputEntity } from './toInput';
 export { normalizeEntityErrors } from './normalizeErrors';

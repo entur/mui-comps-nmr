@@ -79,8 +79,14 @@ request is about to replace). Cancel is the hook's `reset()` — a `RESET` actio
 setting `value ← baseline` and clearing `errors`, with no epoch bump and no
 request. That replaces the host-side remount-under-a-new-`key` idiom, which
 threw away the loaded entity and re-fetched it; the `key` remount is still the
-way to switch *records*. `footerLabels` (`EditFooterLabels`) localizes every
-string — defaults are English, since there is no i18n runtime here.
+way to switch *records*. The band is **sticky, so its own `backgroundColor`
+stays opaque** (`background.paper`) and the dirty tint rides on top as a flat
+`linear-gradient` — an `alpha()` colour there is 92% see-through and the fields
+scroll visibly through the buttons. Host reach: `footerProps`
+(`EditFooterHostProps` = `EditFooterProps` minus the state the hook owns) carries
+`labels` (English defaults, no i18n runtime here), `slotProps` (per-button MUI
+overrides, applied *before* the controlled `disabled`/`onClick`) and `sx`
+(applied after every default, so `backgroundImage: 'none'` drops the tint).
 `EditFooter` and `SaveSnackbar` are exported presentational components holding
 no state, so a host driving the presentational form directly (or rendering its
 own chrome from `onSaved`/`onError`) uses the same pieces.

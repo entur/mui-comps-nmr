@@ -9,7 +9,7 @@
  * distinguishes "nothing to lose" from "unsaved work" without the host having
  * to read the form's internals.
  */
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Button, Stack, Typography, type ButtonProps } from '@mui/material';
 import { alpha, type SxProps, type Theme } from '@mui/material/styles';
 
 // Status dot geometry + the halo it pulses out to while dirty.
@@ -39,6 +39,14 @@ const DEFAULT_LABELS: Required<EditFooterLabels> = {
   saving: 'Saving…',
 };
 
+/** Per-button MUI overrides. The controlled props — `disabled`, `onClick` and
+ *  the label — are applied after these, so the inert-while-clean contract holds
+ *  whatever a host passes. */
+export interface EditFooterSlotProps {
+  save?: ButtonProps;
+  cancel?: ButtonProps;
+}
+
 export interface EditFooterProps {
   /** Whether the form diverges from the entity the server last returned. */
   dirty: boolean;
@@ -50,9 +58,22 @@ export interface EditFooterProps {
   /** Discard edits. Fired only when there is something to discard. */
   onCancel: () => void;
   labels?: EditFooterLabels;
-  /** Escape hatch for placement — the default is sticky to the bottom. */
+  /** Per-button MUI overrides (variant, colour, size…). */
+  slotProps?: EditFooterSlotProps;
+  /** Applied after every default, so a host can restyle the band — including
+   *  `backgroundImage: 'none'` to drop the dirty tint. The default is sticky to
+   *  the bottom of the scroll container. */
   sx?: SxProps<Theme>;
 }
+
+/**
+ * The half of {@link EditFooterProps} a host may set when the footer is rendered
+ * for it — by a data-aware wrapper, which owns the rest from `useEntityForm`.
+ */
+export type EditFooterHostProps = Omit<
+  EditFooterProps,
+  'dirty' | 'saving' | 'disabled' | 'onSave' | 'onCancel'
+>;
 
 /**
  * Render the action footer for an edit session.
@@ -67,6 +88,7 @@ export function EditFooter({
   onSave,
   onCancel,
   labels,
+  slotProps,
   sx,
 }: EditFooterProps) {
   const l = { ...DEFAULT_LABELS, ...labels };
@@ -91,8 +113,16 @@ export function EditFooter({
           py: 1.5,
           borderTop: 1,
           borderColor: dirty ? 'warning.main' : 'divider',
-          bgcolor: theme =>
-            dirty ? alpha(theme.palette.warning.main, DIRTY_TINT) : 'background.paper',
+          // The band is sticky, so its own colour has to be opaque or the form
+          // scrolls through it. The dirty tint therefore rides on top as a flat
+          // gradient — the same trick MUI uses for dark-mode elevation overlays
+          // — instead of being an `alpha()` colour that replaces the surface.
+          backgroundColor: 'background.paper',
+          backgroundImage: theme => {
+            if (!dirty) return 'none';
+            const tint = alpha(theme.palette.warning.main, DIRTY_TINT);
+            return `linear-gradient(${tint}, ${tint})`;
+          },
           boxShadow: dirty ? '0 -10px 28px -20px rgba(0,0,0,0.55)' : 'none',
           transition: theme =>
             theme.transitions.create(['background-color', 'border-color', 'box-shadow'], {
@@ -144,12 +174,19 @@ export function EditFooter({
           variant="outlined"
           color="inherit"
           size="small"
+          {...slotProps?.cancel}
           disabled={inert}
           onClick={onCancel}
         >
           {l.cancel}
         </Button>
-        <Button variant="contained" size="small" disabled={inert} onClick={onSave}>
+        <Button
+          variant="contained"
+          size="small"
+          {...slotProps?.save}
+          disabled={inert}
+          onClick={onSave}
+        >
           {l.save}
         </Button>
       </Stack>

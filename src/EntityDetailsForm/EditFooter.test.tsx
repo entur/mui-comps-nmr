@@ -47,6 +47,63 @@ describe('EditFooter', () => {
     expect(cancel()).toBeDisabled();
   });
 
+  it('keeps the band opaque when dirty, so the form cannot scroll through it', () => {
+    // The footer is sticky: an `alpha()` tint as the background colour leaves it
+    // 92% see-through, and the fields scroll visibly under the buttons. The tint
+    // has to composite over the surface, not replace it.
+    const { container, rerender } = render(
+      <EditFooter dirty={false} onSave={vi.fn()} onCancel={vi.fn()} />
+    );
+    const band = () => container.firstElementChild as HTMLElement;
+    const clean = getComputedStyle(band()).backgroundColor;
+
+    rerender(<EditFooter dirty onSave={vi.fn()} onCancel={vi.fn()} />);
+
+    const style = getComputedStyle(band());
+    expect(style.backgroundColor).toBe(clean);
+    expect(style.backgroundColor).not.toMatch(/rgba|transparent/);
+    expect(style.backgroundImage).toMatch(/linear-gradient/);
+  });
+
+  it('lets a host restyle the band — its sx wins over the defaults', () => {
+    const { container } = render(
+      <EditFooter dirty onSave={vi.fn()} onCancel={vi.fn()} sx={{ bgcolor: 'rgb(1, 2, 3)' }} />
+    );
+
+    expect(getComputedStyle(container.firstElementChild as HTMLElement).backgroundColor).toBe(
+      'rgb(1, 2, 3)'
+    );
+  });
+
+  it('lets a host restyle either button through slotProps', () => {
+    render(
+      <EditFooter
+        dirty
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        slotProps={{ save: { color: 'secondary' }, cancel: { size: 'large' } }}
+      />
+    );
+
+    expect(save().className).toMatch(/MuiButton-containedSecondary/);
+    expect(cancel().className).toMatch(/MuiButton-outlinedSizeLarge/);
+  });
+
+  it('keeps the controlled props, whatever slotProps ask for', () => {
+    const onSave = vi.fn();
+    render(
+      <EditFooter
+        dirty={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        slotProps={{ save: { disabled: false } }}
+      />
+    );
+
+    // Inert-while-clean is the component's contract, not a default to override.
+    expect(save()).toBeDisabled();
+  });
+
   it('states the session status, and takes localized strings for every word', () => {
     const { rerender } = render(
       <EditFooter dirty={false} onSave={vi.fn()} onCancel={vi.fn()} />

@@ -49,11 +49,14 @@ describe('renderWrapperSource', () => {
     expect(src).toMatch(/const \{ value, setValue, reset, loading, saving, load, dirty, errors, handleSave \}/);
   });
 
-  it('passes the footer strings through, so a host can localize them', () => {
-    // The library ships English defaults and no i18n dependency; without this
-    // prop a Norwegian host cannot reach the two buttons it renders.
-    expect(src).toMatch(/footerLabels\?: EditFooterLabels;/);
-    expect(src).toMatch(/labels=\{footerLabels\}/);
+  it('exposes the footer to the host for labels and styling', () => {
+    // The wrapper renders the footer itself, so without a passthrough a host
+    // can neither localize it (English defaults, no i18n runtime here) nor theme
+    // it. `EditFooterHostProps` omits the state the hook owns.
+    expect(src).toMatch(/footerProps\?: EditFooterHostProps;/);
+    // Spread before the controlled props: the type already forbids overriding
+    // them, but the order makes it true at runtime too.
+    expect(src).toMatch(/<EditFooter\s+\{\.\.\.footerProps\}\s+dirty=\{dirty\}/);
   });
 
   it('gates not-found on the settled load phase, never on `loading`', () => {
