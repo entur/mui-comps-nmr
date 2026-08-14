@@ -1,58 +1,10 @@
 import { useState, type FC, type ReactNode } from 'react';
 import { Box, Stack, Tab, Tabs, Typography } from '@mui/material';
-import type {
-  EntityDetailsFormProps,
-  FieldEntry,
-  FieldSpec,
-  Layout,
-  LayoutItem,
-  RefOption,
-} from '../types';
+import type { EntityDetailsFormProps, FieldSpec } from '../types';
 import { getPath, setPath } from '../utils/paths';
-import { humanize } from '../../shared/humanize';
+import { resolveSections, type ResolvedField } from '../utils/sections';
 import { renderControl } from './controls';
 import { ObjectGrid } from '../../ObjectGrid';
-
-/** A field resolved for rendering: its registry key, display label, the optional
- *  explicit grid column entries, and (for a `reference`) the option-dataset
- *  closure — both from the layout. */
-interface ResolvedField {
-  key: string;
-  label: string;
-  cols?: FieldEntry[];
-  options?: () => RefOption[];
-}
-interface Section {
-  label: string;
-  fields: ResolvedField[];
-}
-
-/** Normalize a `LayoutItem` to `{ field, label?, entries?, options? }`. */
-const norm = (
-  item: LayoutItem
-): { field: string; label?: string; entries?: FieldEntry[]; options?: () => RefOption[] } =>
-  typeof item === 'string'
-    ? { field: item }
-    : { field: item.field, label: item.label, entries: item.entries, options: item.options };
-
-function resolveSections(fields: Record<string, FieldSpec>, layout?: Layout): Section[] {
-  if (!layout) {
-    return [{ label: '', fields: Object.keys(fields).map(key => ({ key, label: humanize(key) })) }];
-  }
-  const seen = new Set<string>();
-  return Object.entries(layout).map(([label, items]) => ({
-    label,
-    fields: items
-      .map(norm)
-      .filter(e => fields[e.field] && !seen.has(e.field) && (seen.add(e.field), true))
-      .map(e => ({
-        key: e.field,
-        label: e.label ?? humanize(e.field),
-        cols: e.entries,
-        options: e.options,
-      })),
-  }));
-}
 
 /**
  * Build a presentational (dumb) entity form bound to a generated `FIELDS`
@@ -73,7 +25,9 @@ export function createAbstractEntityDetailsForm<E>(
     disabled: disabledProp,
   }) => {
     const [active, setActive] = useState(0);
-    const sections = resolveSections(fields, layout).filter(s => s.fields.length > 0);
+    // Empty sections are dropped by `resolveSections` itself, so the skeleton
+    // and the form always agree on how many there are.
+    const sections = resolveSections(fields, layout);
     const current = Math.min(active, Math.max(0, sections.length - 1));
 
     const field = (
