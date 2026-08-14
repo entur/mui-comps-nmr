@@ -1,14 +1,14 @@
 /**
  * Internal barrel for EntityDetailsForm (not the public API).
  */
-export { createAbstractEntityDetailsForm } from './abstractForm';
+export { createAbstractEntityDetailsForm } from './components/abstractForm';
 export { useEntityForm } from './hooks/useEntityForm';
-export { EditFooter } from './EditFooter';
-export { SaveSnackbar } from './SaveSnackbar';
-export type { EditFooterProps, EditFooterLabels, EditFooterSlotProps, EditFooterHostProps } from './EditFooter';
-export type { SaveSnackbarProps, SaveToast } from './SaveSnackbar';
-export { toInputEntity } from './toInput';
-export { normalizeEntityErrors } from './normalizeErrors';
+export { EditFooter } from './components/EditFooter';
+export { SaveSnackbar } from './components/SaveSnackbar';
+export type { EditFooterProps, EditFooterLabels, EditFooterSlotProps, EditFooterHostProps } from './components/EditFooter';
+export type { SaveSnackbarProps, SaveToast } from './components/SaveSnackbar';
+export { toInputEntity } from './utils/toInput';
+export { normalizeEntityErrors } from './utils/normalizeErrors';
 export type {
   EntityDetailsFormProps,
   FieldSpec,

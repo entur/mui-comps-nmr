@@ -39,7 +39,7 @@ describe('renderWrapperSource', () => {
   });
 
   it('renders the dirty-gated action footer in place of the bare Save button', () => {
-    expect(src).toMatch(/import \{ EditFooter \} from '\.\.\/EditFooter';/);
+    expect(src).toMatch(/import \{ EditFooter \} from '\.\.\/components\/EditFooter';/);
     expect(src).not.toMatch(/<button onClick=\{handleSave\}/);
     expect(src).toMatch(/dirty=\{dirty\}/);
     expect(src).toMatch(/onSave=\{handleSave\}/);

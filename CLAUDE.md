@@ -16,6 +16,18 @@ Public API in `src/index.ts`. `src/EntityDetailsForm/formImpls/*` is generator
 output — **never hand-edit**; fix the template in `generateWrappers.ts` and
 re-run it.
 
+**Layout of `src/EntityDetailsForm/`** — root holds the contract only
+(`index.ts`, `types.ts`); `components/` everything that renders (`abstractForm`,
+`controls`, `EditFooter`, `SaveSnackbar`), `hooks/` the one hook, `utils/` the
+pure functions (`paths`, `toInput`, `reduceToSobekInput`, `normalizeErrors`,
+`dirty`), `formImpls/` the generated wrappers. Tests sit beside their subject.
+Two files outside the directory hardcode paths into it and must move with it:
+`scripts/distillTypes.ts` (`TYPES_IMPORT`, why `types.ts` stays at the root —
+moving it rewrites every committed `src/entities/*`) and
+`scripts/generateWrappers.ts`, whose emitted imports name
+`../components/{abstractForm,EditFooter}` and are pinned by
+`generateWrappers.test.ts`.
+
 `SobekProvider` (`src/context/SobekContext.tsx`) is a typed FC, not the raw
 `Context.Provider`: `value: SobekCtx` is required, so a host threading a
 possibly-undefined session is a compile error rather than a render-time throw
@@ -63,7 +75,7 @@ Observation only: the hook keeps owning the value, and feeding it back in as a
 prop is unsupported (it would reintroduce the load/epoch races). Dirty is
 computed against a `baseline` in reducer state, set by `LOAD_SUCCESS` and
 `SAVE_SUCCESS` — so a saved form is clean without the host re-baselining. The
-comparison (`src/EntityDetailsForm/dirty.ts`) treats `undefined | null | false |
+comparison (`src/EntityDetailsForm/utils/dirty.ts`) treats `undefined | null | false |
 '' | []` as one value, which is what stops an untouched Switch reporting `false`
 against a null-backed baseline, or a text field typed into and cleared, from
 reading as edits. `0` is deliberately not empty. Both callbacks reach the hook
@@ -71,7 +83,7 @@ through the generated wrapper's `...rest`, so the generator only declares them
 on `<Entity>FormProps` — nothing else in the template changes.
 
 **Edit session.** In `mode='edit'` the wrapper renders `EditFooter`
-(`src/EntityDetailsForm/EditFooter.tsx`) rather than a bare Save button: a
+(`src/EntityDetailsForm/components/EditFooter.tsx`) rather than a bare Save button: a
 status line plus Cancel/Save, all three **inert until `dirty`** — so Save can't
 re-send an unchanged entity and Cancel can't discard nothing. Both actions also
 lock while `saving` (a discard mid-flight would restore a baseline the in-flight

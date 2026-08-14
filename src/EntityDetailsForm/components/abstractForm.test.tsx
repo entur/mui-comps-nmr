@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { createAbstractEntityDetailsForm } from './abstractForm';
-import type { FieldSpec, EntityDetailsFormProps } from './types';
+import type { FieldSpec, EntityDetailsFormProps } from '../types';
 
 interface V {
   name?: { value?: string | null } | null;

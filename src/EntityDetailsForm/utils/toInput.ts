@@ -1,5 +1,5 @@
 import { getPath, setPath } from './paths';
-import type { FieldSpec } from './types';
+import type { FieldSpec } from '../types';
 
 /**
  * Build an Input-like object from an entity by reading every non-serverManaged

@@ -7,11 +7,11 @@ import type {
   Layout,
   LayoutItem,
   RefOption,
-} from './types';
-import { getPath, setPath } from './paths';
-import { humanize } from '../shared/humanize';
+} from '../types';
+import { getPath, setPath } from '../utils/paths';
+import { humanize } from '../../shared/humanize';
 import { renderControl } from './controls';
-import { ObjectGrid } from '../ObjectGrid';
+import { ObjectGrid } from '../../ObjectGrid';
 
 /** A field resolved for rendering: its registry key, display label, the optional
  *  explicit grid column entries, and (for a `reference`) the option-dataset

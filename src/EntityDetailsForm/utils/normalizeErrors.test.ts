@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeEntityErrors } from './normalizeErrors';
-import type { FieldSpec } from './types';
+import type { FieldSpec } from '../types';
 
 const fields: Record<string, FieldSpec> = {
   netexId: { kind: 'text', path: ['netexId'] },

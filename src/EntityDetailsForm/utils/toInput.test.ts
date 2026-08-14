@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { toInputEntity } from './toInput';
-import type { FieldSpec } from './types';
+import type { FieldSpec } from '../types';
 
 interface Vehicle {
   netexId: string;

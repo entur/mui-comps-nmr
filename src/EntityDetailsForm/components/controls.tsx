@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Autocomplete, FormControlLabel, MenuItem, Switch, TextField } from '@mui/material';
 import type { TextFieldProps } from '@mui/material';
-import type { ControlSlotProps, FieldSpec, RefOption } from './types';
+import type { ControlSlotProps, FieldSpec, RefOption } from '../types';
 
 /** A MultilingualString-ish shape: only `.value` is edited; `.lang` is preserved. */
 type Mls = { lang?: string | null; value?: string | null } | null | undefined;

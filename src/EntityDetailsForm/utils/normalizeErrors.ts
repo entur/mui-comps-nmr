@@ -1,4 +1,4 @@
-import type { FieldSpec } from './types';
+import type { FieldSpec } from '../types';
 
 export function normalizeEntityErrors(
   error: unknown,

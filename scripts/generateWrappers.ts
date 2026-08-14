@@ -43,11 +43,11 @@ export const renderWrapperSource = (entry: ManifestEntry): string => {
 
   return [
       BANNER,
-      `import { createAbstractEntityDetailsForm } from '../abstractForm';`,
+      `import { createAbstractEntityDetailsForm } from '../components/abstractForm';`,
       `import { useEntityForm } from '../hooks/useEntityForm';`,
       `import { useSobekCtx } from '../../context/SobekContext';`,
-      `import { EditFooter } from '../EditFooter';`,
-      `import type { EditFooterHostProps } from '../EditFooter';`,
+      `import { EditFooter } from '../components/EditFooter';`,
+      `import type { EditFooterHostProps } from '../components/EditFooter';`,
       `import { FIELDS } from '../../entities/${fileName}';`,
       `import type { Entity as ${entityName} } from '../../entities/${fileName}';`,
       `import { ${getDoc}, ${updateDoc} } from '../../generated/operations/${fileName}.generated';`,

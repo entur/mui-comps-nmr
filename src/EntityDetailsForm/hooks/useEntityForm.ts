@@ -2,10 +2,10 @@ import { useReducer, useEffect, useMemo, useCallback, useRef } from 'react';
 import { GraphQLClient } from 'graphql-request';
 import { useSobekCtx } from '../../context/SobekContext';
 import type { FieldSpec } from '../types';
-import { toInputEntity } from '../toInput';
-import { reduceToSobekInput } from '../reduceToSobekInput';
-import { normalizeEntityErrors } from '../normalizeErrors';
-import { isDirty } from '../dirty';
+import { toInputEntity } from '../utils/toInput';
+import { reduceToSobekInput } from '../utils/reduceToSobekInput';
+import { normalizeEntityErrors } from '../utils/normalizeErrors';
+import { isDirty } from '../utils/dirty';
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core';
 
 // Last-resort messages for failures that yield no usable message (transport
