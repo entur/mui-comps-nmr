@@ -562,6 +562,37 @@ describe('useEntityForm', () => {
     await waitFor(() => expect(result.current.value).toEqual(BUS));
   });
 
+  it('does not let a save landing after a switch into create mode clobber the draft', async () => {
+    // The one record switch that does *not* suspend: create mode has no key, so
+    // it commits immediately instead of being deferred behind the pending
+    // Action. Everything the save's completion writes has to be guarded on the
+    // key still being the one on screen, not just the `saved` tag.
+    const savedTram = { netexId: 'VEH:1', name: { value: 'Tram Saved' } };
+    const fresh = { name: { value: 'Brand New' } };
+    let resolveMutation: (data: unknown) => void = () => {};
+
+    mockFns.request.mockImplementation((doc: unknown) => {
+      if (doc === mutationDoc) return new Promise(resolve => { resolveMutation = resolve; });
+      return Promise.resolve(envelope(savedTram));
+    });
+
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
+
+    act(() => result.current.setValue({ netexId: 'VEH:1', name: { value: 'Edited' } } as any));
+    act(() => { result.current.handleSave(); });
+
+    // Host drops netexId while the mutation is out, and the user starts a new
+    // entity in the create form that appears.
+    await swap(rerender, mkProps());
+    act(() => result.current.setValue(fresh as any));
+
+    act(() => resolveMutation({ createOrUpdateVehicle: 'VEH:1' }));
+    await settle();
+
+    expect(result.current.value).toEqual(fresh);
+    expect(result.current.dirty).toBe(true);
+  });
+
   it('surfaces a fallback error when a save fails with no GraphQL errors', async () => {
     mockFns.request
       .mockResolvedValueOnce(envelope(TRAM))

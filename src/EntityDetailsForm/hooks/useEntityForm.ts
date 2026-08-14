@@ -202,6 +202,12 @@ export function useEntityForm<E>(props: UseEntityFormProps<E>) {
   const held = useRef<E | undefined>(undefined);
   if (res?.ok) held.current = res.entity;
 
+  // The key the form is showing *now*. A save's Action captured its key when it
+  // started, so asking whether that key is still current needs a live read —
+  // which is what a ref is, and what the closure cannot be.
+  const keyRef = useRef(key);
+  keyRef.current = key;
+
   // What a save moved forward, tagged with the key it belongs to. That tag is
   // the save's staleness guard, by identity: a save landing after the form
   // switched records writes under a key nobody reads.
@@ -320,6 +326,17 @@ export function useEntityForm<E>(props: UseEntityFormProps<E>) {
         );
         const refreshed = pluck(refreshedData, query.resultPath) as E | undefined;
 
+        // The mutation committed on the server, so the host hears about it
+        // wherever the form has moved to meanwhile.
+        onSaved?.(returnedId);
+
+        // Everything below writes the state of the form on screen, so none of
+        // it may run for a record the form has left. Tagging `setSaved` alone
+        // was not enough: the one switch that does not suspend — edit into
+        // create mode — commits while the Action is still out, and the writes
+        // then landed on a form the save knows nothing about.
+        if (keyRef.current !== key) return;
+
         held.current = refreshed;
         // Tagged with the key this save started under, so a form that switched
         // records meanwhile ignores it. In create mode that key is CREATE_KEY,
@@ -327,10 +344,11 @@ export function useEntityForm<E>(props: UseEntityFormProps<E>) {
         setSaved({ key, entity: refreshed });
         setDraft(undefined);
         setSaveErrors(NO_ERRORS);
-        onSaved?.(returnedId);
       } catch (e) {
         const { fieldErrors, generalErrors } = normalizeEntityErrors(e, fields);
-        setSaveErrors(fieldErrors);
+        // Same guard as the success path: field errors describe the entity that
+        // was sent, so they must not paint onto whatever record replaced it.
+        if (keyRef.current === key) setSaveErrors(fieldErrors);
         // Transport/unknown errors carry no GraphQL error array — without a
         // fallback the save would fail entirely silently.
         const general =

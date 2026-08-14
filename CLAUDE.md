@@ -94,11 +94,14 @@ Observation only: the hook keeps owning the value, and feeding it back in as a
 prop is unsupported (it would reintroduce the load races). Dirty is computed
 against a `baseline` that is *derived*, not stored: the settled load, or what a
 save moved forward (tagged with the key it belongs to, which is how a stale
-save is ignored). `value = draft ?? baseline`, so an untouched form **is** its
-baseline and a load or a save leaves it clean with nothing to re-baseline. The
-draft is discarded when the record changes, so a new record can't be masked by
-the previous one's edits. The
-comparison (`src/EntityDetailsForm/utils/dirty.ts`) treats `undefined | null | false |
+save is ignored). The tag alone isn't the guard, though: the save's whole
+completion — `held`, the draft reset, the error reset — is gated on a live-key
+ref, because the one switch that *doesn't* suspend (edit → create) commits
+while the Action is still out. Only `onSaved` fires regardless: the mutation
+committed server-side, wherever the form went. `value = draft ?? baseline`, so
+an untouched form **is** its baseline and a load or a save leaves it clean with
+nothing to re-baseline. The draft is discarded when the record changes, so a new
+record can't be masked by the previous one's edits. The comparison (`src/EntityDetailsForm/utils/dirty.ts`) treats `undefined | null | false |
 '' | []` as one value, which is what stops an untouched Switch reporting `false`
 against a null-backed baseline, or a text field typed into and cleared, from
 reading as edits. `0` is deliberately not empty. Both callbacks reach the hook
