@@ -102,11 +102,11 @@
 
 <div class="callout good"><strong>Install from a GitHub Release.</strong> The repo is public, so the tarball URL needs no token:</div>
 
-<pre><code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.7.0/entur-mui-comps-nmr-0.7.0.tgz</code></pre>
+<pre><code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.8.0/entur-mui-comps-nmr-0.8.0.tgz</code></pre>
 
 <p>Releases are listed at <a href="https://github.com/entur/mui-comps-nmr/releases">github.com/entur/mui-comps-nmr/releases</a>. Each carries one <code>.tgz</code> asset plus a note recording which sobek schema it was built against. The package is <em>not</em> on the npm registry — <code>npm i @entur/mui-comps-nmr</code> returns a 404.</p>
 
-<div class="callout warn"><strong>Upgrading means editing the URL.</strong> A URL install pins that exact URL in your <code>package-lock.json</code>, so <code>^0.7.0</code> ranges don't work and <code>npm outdated</code> will never tell you a new version exists. Watch the Releases page and bump the URL by hand. This is the cost of not being on a registry — the version scheme is already registry-ready, so if that changes, the install command is the only thing that changes.</div>
+<div class="callout warn"><strong>Upgrading means editing the URL.</strong> A URL install pins that exact URL in your <code>package-lock.json</code>, so <code>^0.8.0</code> ranges don't work and <code>npm outdated</code> will never tell you a new version exists. Watch the Releases page and bump the URL by hand. This is the cost of not being on a registry — the version scheme is already registry-ready, so if that changes, the install command is the only thing that changes.</div>
 
 <h3>Peer dependencies</h3>
 <p>All of these are externalized from the build — the host must have them installed, and their major versions are pinned to match hathor. Externalized means the host supplies one shared copy; if these ever resolve to two copies you get invalid-hook-call errors and MUI styles not applying.</p>
@@ -151,7 +151,7 @@ type PaneProps = VehicleFormProps &amp; { title?: string };</code></pre></div>
     <tr><td><code>netexId</code></td><td><code>string</code></td><td>The record to load and edit. <strong>Omit it at mount to start a blank “new” form</strong> (§5).</td></tr>
     <tr><td><code>mode</code></td><td><code>'view' \| 'edit'</code></td><td>Default <code>'edit'</code>. <code>'view'</code> disables every input and hides the footer.</td></tr>
     <tr><td><code>onSaved</code></td><td><code>(netexId) =&gt; void</code></td><td>Called after a save succeeds; receives the saved record's id.</td></tr>
-    <tr><td><code>onError</code></td><td><code>(msgs: string[]) =&gt; void</code></td><td>Called with general (non-field) error messages when a save fails.</td></tr>
+    <tr><td><code>onError</code></td><td><code>(msgs: string[]) =&gt; void</code></td><td>Called with general (non-field) error messages when a save fails, and with the server's messages when a load fails.</td></tr>
     <tr><td><code>onChange</code></td><td><code>(value: Vehicle) =&gt; void</code></td><td>The record as it currently stands in the form. Fires on the load and the post-save refetch too, not only on edits (§6).</td></tr>
     <tr><td><code>onDirtyChange</code></td><td><code>(dirty: boolean) =&gt; void</code></td><td>Fires when the form crosses between clean and edited (§6).</td></tr>
     <tr><td><code>footerProps</code></td><td><code>EditFooterHostProps</code></td><td>Labels and styling for the built-in Save/Cancel footer — <code>labels</code>, <code>slotProps</code>, <code>sx</code> (§5).</td></tr>
@@ -161,7 +161,7 @@ type PaneProps = VehicleFormProps &amp; { title?: string };</code></pre></div>
 </table>
 <div class="callout"><strong>Field-level errors are handled for you.</strong> When a save fails validation, the offending inputs show their messages inline automatically. <code>onError</code> only receives the <em>general</em> messages that don't belong to a single field, so you can show a banner or toast. If a save fails with no usable GraphQL error payload (network drop, malformed response), you still get one message: <code>['Failed to save']</code>.</div>
 <div class="callout"><strong>The three load outcomes are distinct, and the component renders each itself.</strong> While the load is in flight you get a <strong>shaped skeleton</strong>: one placeholder per field, sized by that field's control kind, laid out in the same sections and tabs the real form is about to draw — so the layout does not jump when the record lands, and the form fades in rather than snapping. The shape is derived from the entity registry and your <code>layout</code>/<code>variant</code>, so it stays correct with no row counts to maintain. Pass <code>skeletonProps={{ ariaLabel: '…' }}</code> to localize what a screen reader announces (the default is English, as everywhere here). A load that settles with <em>no matching record</em> renders <code>Not found: &lt;netexId&gt;</code> — never a blank editable form, since saving one of those would create a new record instead of editing the one you asked for. A load that <em>fails</em> (network drop, auth rejection, server error) renders the load error instead, so a transport failure is never reported to your user as a missing record.</div>
-<div class="callout warn"><strong><code>onError</code> is still save-only.</strong> A failed load is shown in place of the form, but nothing calls <code>onError</code> for it — if your app needs to react to a failed load (retry button, redirect, logging), detect it yourself rather than waiting on a callback.</div>
+<div class="callout"><strong>A failed load reaches <code>onError</code> too.</strong> Both halves fail alike: the load hands you the server's own messages, falling back to <code>['Failed to load']</code> when the payload carries no GraphQL errors. It fires <em>once per record</em>, and never for a load the form has already moved on from — so a retry button, a redirect or a log line can hang off the callback rather than off your own detection. The same messages are rendered in place of the form, joined into one line.</div>
 
 <h2 id="auth"><span class="num">3</span>Session &amp; auth — the <code>SobekProvider</code></h2>
 <p>One provider, mounted once near the top of your app, supplies every form below it with the endpoint, the credentials, and the organisation whose data you're working on. It is <strong>mandatory</strong>: a data-aware form with no provider above it throws with <code>mui-comps-nmr: this component must be rendered inside a &lt;SobekProvider&gt;</code>.</p>
@@ -405,7 +405,7 @@ export function VehiclesPage({ vehicles, refetchList, dataOwnerRef }: VehiclesPa
 
 <h2 id="checklist"><span class="num">9</span>Checklist</h2>
 <ul class="tight">
-  <li><span class="pill">install</span> <code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.7.0/entur-mui-comps-nmr-0.7.0.tgz</code> — no token. Upgrades are manual URL edits. Host supplies React 19 / MUI 7 / x-data-grid 8 / Emotion 11 / graphql-request 7.</li>
+  <li><span class="pill">install</span> <code>npm i https://github.com/entur/mui-comps-nmr/releases/download/v0.8.0/entur-mui-comps-nmr-0.8.0.tgz</code> — no token. Upgrades are manual URL edits. Host supplies React 19 / MUI 7 / x-data-grid 8 / Emotion 11 / graphql-request 7.</li>
   <li><span class="pill">provider</span> <code>SobekProvider</code> is mandatory and carries the whole session — <code>endpoint</code>, <code>dataOwnerRef</code>, <code>headers</code>, <code>getHeaders</code>. None of them are form props any more; a form with no provider above it throws.</li>
   <li><span class="pill">auth</span> Token → <code>getHeaders</code> (may be async); constants → <code>headers</code>. Both allowed.</li>
   <li><span class="pill">org</span> <code>dataOwnerRef</code> filters loads, is stamped onto every save from the provider, and renders as a locked field the user can't edit.</li>
@@ -418,11 +418,11 @@ export function VehiclesPage({ vehicles, refetchList, dataOwnerRef }: VehiclesPa
   <li><span class="pill">key</span> Set <code>key={netexId ?? 'new'}</code> so switching records always starts clean. You no longer need a <code>rev</code> counter for discard — Cancel handles that without a reload.</li>
   <li><span class="pill">refresh</span> After <code>onSaved</code>, refetch any list/header copies of the record you keep.</li>
   <li><span class="pill">view</span> <code>mode="view"</code> disables inputs and hides the footer.</li>
-  <li><span class="pill">load</span> Three distinct outcomes, all rendered for you: a shaped skeleton while in flight, <code>Not found: &lt;netexId&gt;</code> for a settled empty load, and the load error for a failed one. <code>onError</code> still fires for saves only.</li>
+  <li><span class="pill">load</span> Three distinct outcomes, all rendered for you: a shaped skeleton while in flight, <code>Not found: &lt;netexId&gt;</code> for a settled empty load, and the load error for a failed one. <code>onError</code> fires for a failed load as well as a failed save.</li>
 </ul>
 
 <footer class="doc">
-  Host integration guide for <code>SobekProvider</code> + <code>VehicleForm</code> / <code>VehicleTypeForm</code> as exported from <code>@entur/mui-comps-nmr</code> v0.7.0. Presentation props (<code>layout</code>, <code>variant</code>, <code>slotProps</code>) are documented separately in the README.
+  Host integration guide for <code>SobekProvider</code> + <code>VehicleForm</code> / <code>VehicleTypeForm</code> as exported from <code>@entur/mui-comps-nmr</code> v0.8.0. Presentation props (<code>layout</code>, <code>variant</code>, <code>slotProps</code>) are documented separately in the README.
 </footer>
 
 </div>
