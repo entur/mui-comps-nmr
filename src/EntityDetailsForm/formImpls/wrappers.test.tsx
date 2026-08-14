@@ -160,7 +160,14 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
       try {
         flushSync(() => root.render(wrapper({ children: <Form netexId={NETEX_ID} /> })));
         expect(container.textContent).not.toContain('Not found');
-        expect(container.textContent).toContain('Loading...');
+
+        // The first paint is the shaped skeleton, and its shape is derived from
+        // this entity's registry — no layout here, so one placeholder per field.
+        const skel = container.querySelector('[role="status"][aria-busy="true"]');
+        expect(skel).not.toBeNull();
+        expect(skel!.querySelectorAll('[data-nmr-skeleton="field"]')).toHaveLength(
+          Object.keys(fields).length
+        );
       } finally {
         act(() => root.unmount());
         container.remove();

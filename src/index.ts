@@ -20,6 +20,15 @@ export type {
   EditFooterHostProps,
 } from './EntityDetailsForm/components/EditFooter';
 export type { SaveSnackbarProps, SaveToast } from './EntityDetailsForm/components/SaveSnackbar';
+// Loading chrome. The wrappers render these themselves; exported for a host
+// driving the presentational form during its own fetch. The skeleton's shape is
+// derived from a `FIELDS` registry, so it never drifts from the form.
+export { FormSkeleton, FormArrival } from './EntityDetailsForm/components/FormSkeleton';
+export type {
+  FormSkeletonProps,
+  FormSkeletonHostProps,
+  FormArrivalProps,
+} from './EntityDetailsForm/components/FormSkeleton';
 // Generated wrappers + their props types: VehicleTypeForm/VehicleTypeFormProps,
 // VehicleForm/VehicleFormProps. Re-exported wholesale rather than named, so a
 // new manifest entry reaches the public API the moment it is generated.

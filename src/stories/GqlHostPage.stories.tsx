@@ -25,7 +25,7 @@ import {
 } from "../index";
 import { vehicleSeed, vehicleTypeSeed } from "./initDataSets";
 import { vehicleLayout, vehicleTypeLayout } from "./initLayouts";
-import { installStoriesMock } from "./mockEndpoint";
+import { installStoriesMock, setMockLatency } from "./mockEndpoint";
 
 /*
  * Data-aware counterpart to the Dumb-Forms stories: mounts the real,
@@ -45,6 +45,8 @@ installStoriesMock();
 
 const LIST_WIDTH = 260;
 const NEW_KEY = "new";
+/** Slow enough that the skeleton and the arrival fade are actually watchable. */
+const DEFAULT_READ_DELAY_MS = 600;
 
 /**
  * How a multi-section form presents its sections (mirrors DumbAppMock):
@@ -146,6 +148,13 @@ interface GqlHostPageProps {
   /** How multi-section forms (VehicleType) present sections. Single-section
    *  Vehicle renders flat regardless. */
   tabStyle?: TabStyle;
+  /** Mock read latency. The forms render their own load states, so this is the
+   *  only way to see the shaped skeleton and the arrival fade — at `0` the
+   *  response resolves in the same tick and neither paints.
+   *
+   *  Consumed by the meta's `beforeEach`, not by this component: it configures
+   *  the mock endpoint, which is story infrastructure rather than page state. */
+  readDelayMs?: number;
 }
 
 /**
@@ -325,13 +334,27 @@ const meta: Meta<typeof GqlHostPage> = {
   title: "compositions/GqlHostPages",
   component: GqlHostPage,
   parameters: { layout: "fullscreen" },
-  args: { tabStyle: "one-line" },
+  // Configure the mock *before* the story renders. Not in the component body
+  // (mutating module state during render is impure — StrictMode runs it twice)
+  // and not in a `useEffect` either: the forms fire their load from a passive
+  // effect, and on mount React runs child effects before parent ones, so a
+  // parent effect would land one request too late and the first load would
+  // always be instant — exactly the case this control exists to slow down.
+  beforeEach: ({ args }) => {
+    setMockLatency({ read: args.readDelayMs ?? DEFAULT_READ_DELAY_MS });
+  },
+  args: { tabStyle: "one-line", readDelayMs: DEFAULT_READ_DELAY_MS },
   argTypes: {
     tabStyle: {
       control: "inline-radio",
       options: ["none", "one-line", "pills"],
       description:
         "How multi-section forms (VehicleType) present sections: none = stacked (no tabs), one-line = scrollable tab row, pills = wrapping pill tabs. Vehicle is single-section, so unaffected.",
+    },
+    readDelayMs: {
+      control: { type: "range", min: 0, max: 3000, step: 100 },
+      description:
+        "Mock read latency. Raise it to watch the shaped skeleton and the arrival fade; 0 resolves in the same tick, so neither is visible. Select a record in either list to re-trigger a load.",
     },
   },
 };

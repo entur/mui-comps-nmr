@@ -82,6 +82,23 @@ reading as edits. `0` is deliberately not empty. Both callbacks reach the hook
 through the generated wrapper's `...rest`, so the generator only declares them
 on `<Entity>FormProps` — nothing else in the template changes.
 
+**Loading.** While a record is in flight the wrapper renders `FormSkeleton`
+(`src/EntityDetailsForm/components/FormSkeleton.tsx`), not a text placeholder.
+Its shape is **derived, never tuned**: `resolveSections`
+(`src/EntityDetailsForm/utils/sections.ts` — extracted from `abstractForm` so
+both call it) yields the same sections/fields the form will draw, and each
+placeholder is sized from the field's `kind` (`KIND_H`). A new entity or an
+edited `layout`/`variant` reshapes both at once, so there is no row-count
+literal to drift (hathor's `VEHICLE_FORM_ROWS = 7` is the anti-pattern). The
+arriving form fades in via `FormArrival`, which wraps the **presentation only**
+— its keyframe animates `transform`, and a transformed ancestor becomes a
+containing block, which would break `EditFooter`'s `position: sticky` for the
+length of the fade. Both honour `prefers-reduced-motion` (the guard also kills
+MUI's `wave`, which ships none). Host reach is `skeletonProps`
+(`FormSkeletonHostProps` = `ariaLabel` + `sx`); the shape is deliberately not
+overridable. `Not found` and the load-error branch stay plain text — a skeleton
+means "content is coming", which misreads on a terminal state.
+
 **Edit session.** In `mode='edit'` the wrapper renders `EditFooter`
 (`src/EntityDetailsForm/components/EditFooter.tsx`) rather than a bare Save button: a
 status line plus Cancel/Save, all three **inert until `dirty`** — so Save can't

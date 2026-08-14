@@ -5,6 +5,8 @@ import { useEntityForm } from '../hooks/useEntityForm';
 import { useSobekCtx } from '../../context/SobekContext';
 import { EditFooter } from '../components/EditFooter';
 import type { EditFooterHostProps } from '../components/EditFooter';
+import { FormSkeleton, FormArrival } from '../components/FormSkeleton';
+import type { FormSkeletonHostProps } from '../components/FormSkeleton';
 import { FIELDS } from '../../entities/vehicle';
 import type { Entity as Vehicle } from '../../entities/vehicle';
 import { GetVehicleDocument, UpdateVehicleDocument } from '../../generated/operations/vehicle.generated';
@@ -30,10 +32,14 @@ export interface VehicleFormProps
    *  English (no i18n runtime here); `sx` and `slotProps` reach the band and
    *  the two buttons. The dirty/saving state stays the hook's. */
   footerProps?: EditFooterHostProps;
+  /** Label and styling for the loading skeleton this renders. Its *shape* is
+   *  derived from `FIELDS` + `layout` + `variant` and is not overridable —
+   *  that is what keeps it from drifting out of step with the form. */
+  skeletonProps?: FormSkeletonHostProps;
 }
 
 export function VehicleForm(props: VehicleFormProps) {
-  const { mode = 'edit', layout, variant, slotProps, netexId, footerProps, ...rest } = props;
+  const { mode = 'edit', layout, variant, slotProps, netexId, footerProps, skeletonProps, ...rest } = props;
   // Display-only: renders the locked dataOwnerRef control. Overlaid on every
   // render, not just while `value` is undefined — otherwise the control keeps
   // showing the org that was current when the user first typed. The write
@@ -60,7 +66,7 @@ export function VehicleForm(props: VehicleFormProps) {
   // effect, so `loading` is still false on the first commit — gating the
   // not-found branch on it flashed "Not found" on every mount.
   if (netexId && !value && (load === 'idle' || load === 'pending'))
-    return <div>Loading...</div>;
+    return <FormSkeleton {...skeletonProps} fields={FIELDS} layout={layout} variant={variant} />;
   // A failed load is not a missing record — keep the two distinguishable.
   if (netexId && load === 'error') return <div>{errors.__init}</div>;
   // Settled zero-row load: never render a blank editable form (saving it
@@ -70,16 +76,21 @@ export function VehicleForm(props: VehicleFormProps) {
 
   return (
     <>
-      <VehicleFormPresentation
-        value={{ ...(value ?? ({} as Vehicle)), dataOwnerRef }}
-        onChange={setValue}
-        mode={mode}
-        layout={layout}
-        variant={variant}
-        slotProps={slotProps}
-        errors={errors}
-        disabled={loading || saving}
-      />
+      {/* Fades in as the record arrives, replacing the skeleton. Wraps the
+          presentation only: the fade animates `transform`, which would make
+          an ancestor a containing block and break the footer's sticky. */}
+      <FormArrival>
+        <VehicleFormPresentation
+          value={{ ...(value ?? ({} as Vehicle)), dataOwnerRef }}
+          onChange={setValue}
+          mode={mode}
+          layout={layout}
+          variant={variant}
+          slotProps={slotProps}
+          errors={errors}
+          disabled={loading || saving}
+        />
+      </FormArrival>
       {/* Inert until the form diverges from the server, so Cancel cannot
           discard nothing and Save cannot re-send an unchanged entity. */}
       {mode === 'edit' && (
