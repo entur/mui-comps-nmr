@@ -25,7 +25,7 @@ import {
 } from "../index";
 import { vehicleSeed, vehicleTypeSeed } from "./initDataSets";
 import { vehicleLayout, vehicleTypeLayout } from "./initLayouts";
-import { installStoriesMock } from "./mockEndpoint";
+import { installStoriesMock, setMockLatency } from "./mockEndpoint";
 
 /*
  * Data-aware counterpart to the Dumb-Forms stories: mounts the real,
@@ -146,6 +146,10 @@ interface GqlHostPageProps {
   /** How multi-section forms (VehicleType) present sections. Single-section
    *  Vehicle renders flat regardless. */
   tabStyle?: TabStyle;
+  /** Mock read latency. The forms render their own load states, so this is the
+   *  only way to see the shaped skeleton and the arrival fade — at `0` the
+   *  response resolves in the same tick and neither paints. */
+  readDelayMs?: number;
 }
 
 /**
@@ -154,8 +158,11 @@ interface GqlHostPageProps {
  * data-aware form; the pane owns the four host concerns — stable auth headers,
  * new-vs-edit via `netexId`, discard via remount `key`, and reacting to saves.
  */
-const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
+const GqlHostPage = ({ tabStyle = "one-line", readDelayMs }: GqlHostPageProps) => {
   const { variant, slotProps } = useMemo(() => deriveTabs(tabStyle), [tabStyle]);
+  // Applied during render, not in an effect: the first form mounts and fires its
+  // load in this same commit, so an effect would set it one request too late.
+  if (readDelayMs !== undefined) setMockLatency({ read: readDelayMs });
   const [selection, setSelection] = useState<Selection | null>({
     entity: "vehicle",
     netexId: "VEH:Vehicle:701",
@@ -325,13 +332,18 @@ const meta: Meta<typeof GqlHostPage> = {
   title: "compositions/GqlHostPages",
   component: GqlHostPage,
   parameters: { layout: "fullscreen" },
-  args: { tabStyle: "one-line" },
+  args: { tabStyle: "one-line", readDelayMs: 600 },
   argTypes: {
     tabStyle: {
       control: "inline-radio",
       options: ["none", "one-line", "pills"],
       description:
         "How multi-section forms (VehicleType) present sections: none = stacked (no tabs), one-line = scrollable tab row, pills = wrapping pill tabs. Vehicle is single-section, so unaffected.",
+    },
+    readDelayMs: {
+      control: { type: "range", min: 0, max: 3000, step: 100 },
+      description:
+        "Mock read latency. Raise it to watch the shaped skeleton and the arrival fade; 0 resolves in the same tick, so neither is visible. Select a record in either list to re-trigger a load.",
     },
   },
 };

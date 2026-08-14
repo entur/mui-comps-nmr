@@ -23,6 +23,30 @@ export const MOCK_OWNER_REF = "NOG:Authority:mock-owner";
 /** Marker so the patch is installed at most once per session. */
 const PATCHED = Symbol.for("mui-comps-nmr.mockFetch");
 
+// Artificial latency. Without it every response resolves in the same tick, so
+// the load states the forms render for themselves — the shaped `FormSkeleton`,
+// the arrival fade, the footer's `saving` lock — never paint long enough to
+// see. Reads are the slower of the two, as they are against a real backend.
+const DEFAULT_READ_MS = 600, DEFAULT_WRITE_MS = 350;
+
+/** Mutable so a story can retune it *after* the one-shot install. */
+const latency = { read: DEFAULT_READ_MS, write: DEFAULT_WRITE_MS };
+
+/**
+ * Retune the mock's response latency at runtime.
+ *
+ * `installStoriesMock` patches `fetch` once per session, so a story that wants
+ * a different delay has to set it here rather than by re-installing.
+ *
+ * @param next partial override; `0` disables the delay for that half
+ */
+export function setMockLatency(next: Partial<typeof latency>): void {
+  Object.assign(latency, next);
+}
+
+const sleep = (ms: number): Promise<void> =>
+  ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve();
+
 /** One entity's read/write wiring for the mock. */
 type EntityMock = {
   /** Operation-name entity segment — matches `Get<name>` / `Update<name>`. */
@@ -84,10 +108,12 @@ export function installStoriesMock(): void {
 
     // Mutation: echo the incoming id (or a new-record placeholder). No write.
     if (vars.input) {
+      await sleep(latency.write);
       return gql({ [mock.saveField]: vars.input.netexId ?? `VEH:${mock.name}:NEW` });
     }
 
     // Query: look the record up by its first requested netexId.
+    await sleep(latency.read);
     const netexId = vars.filter?.netexIds?.[0];
     const entity = netexId ? mock.seed[netexId] : undefined;
     return gql({ [mock.listField]: { content: entity ? [entity] : [] } });
