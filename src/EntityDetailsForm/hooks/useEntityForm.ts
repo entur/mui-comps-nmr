@@ -1,4 +1,4 @@
-import { useReducer, useEffect, useMemo, useCallback, useRef } from 'react';
+import { use, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { GraphQLClient } from 'graphql-request';
 import { useSobekCtx } from '../../context/SobekContext';
 import type { FieldSpec } from '../types';
@@ -20,6 +20,14 @@ const LOAD_ERR = 'Failed to load', SAVE_ERR = 'Failed to save';
 // when the entity actually carries it as a `locked` field (see handleSave).
 const OWNER_FIELD = 'dataOwnerRef';
 
+// Create mode has no record, so it has no key — and a form with no key issues
+// no request and never suspends. `use()` is the one hook that may be called
+// conditionally, which is what lets one hook serve both modes.
+const CREATE_KEY = '';
+
+// Stable empty map, so a cleared `errors` doesn't mint a new identity per render.
+const NO_ERRORS: Record<string, string> = {};
+
 export interface EntityFormConfig {
   fields: Record<string, FieldSpec>;
   query: {
@@ -35,8 +43,14 @@ export interface EntityFormConfig {
   };
 }
 
-export interface UseEntityFormProps extends EntityFormConfig {
-  netexId?: string;
+export interface UseEntityFormProps<E = any> extends EntityFormConfig {
+  /**
+   * The record's load, from {@link useEntityResource} — `null` in create mode.
+   * It is a prop rather than something this hook starts for itself because the
+   * promise must be held by a component that does *not* suspend; see the note
+   * on `useEntityResource`.
+   */
+  resource: EntityResource<E> | null;
   onSaved?: (netexId: string) => void;
   onError?: (generalErrors: string[]) => void;
   /**
@@ -49,177 +63,216 @@ export interface UseEntityFormProps extends EntityFormConfig {
   /**
    * Fired when the form crosses between clean and dirty. The baseline is the
    * entity the server last handed back (load or post-save refetch), compared
-   * under the empty-ish rule in `../dirty`.
+   * under the empty-ish rule in `../utils/dirty`.
    */
   onDirtyChange?: (dirty: boolean) => void;
 }
 
-// --- Reducer: explicit async state machine -----------------------------
-//
-// Staleness lives here: every async completion carries the epoch it started
-// with and the reducer no-ops when `action.epoch !== state.epoch`, replacing
-// the scattered `requestId !== requestIdRef.current` guards. `epoch` bumps on
-// every new load/save start and when a load is retired (create mode).
+/**
+ * Settled-ness of the load, for consumers that must tell a missing record from
+ * a failed one. There is no `'pending'`: the record is read with `use()`, so a
+ * form with a pending load has not committed — the nearest `<Suspense>` is
+ * showing its fallback instead, and this hook has not returned at all.
+ */
+export type LoadPhase = 'idle' | 'ok' | 'error';
 
-interface EntityFormState<E> {
-  value: E | undefined;
-  /** Server's last word on this entity — what `value` is diffed against. */
-  baseline: E | undefined;
-  loading: boolean;
-  saving: boolean;
-  errors: Record<string, string>;
-  epoch: number;
-  // Settled-ness of the load, distinct from `loading`. `loading` is false on the
-  // first commit (LOAD_START only fires from a passive effect), so it cannot tell
-  // "not started yet" from "settled with zero rows" — consumers rendering a
-  // not-found state must gate on this instead. 'error' also stays distinct from
-  // 'ok' so a failed load is never reported as a missing record.
-  load: LoadPhase;
-}
+/**
+ * A settled load. Deliberately a *value*, not a rejected promise: `use()` would
+ * rethrow a rejection into the nearest error boundary, which unmounts the form
+ * and takes any in-progress edits with it. Failure is data, so a failed reload
+ * can sit beside an editable entity exactly as it did before.
+ */
+type Loaded<E> = { ok: true; entity: E | undefined } | { ok: false; messages: string[] };
 
-type LoadPhase = 'idle' | 'pending' | 'ok' | 'error';
+/** Read a value out of a response by the config's `resultPath`. */
+const pluck = (data: unknown, path: readonly (string | number)[]): any =>
+  path.reduce<any>((o, k) => o?.[k], data);
 
-type EntityFormAction<E> =
-  | { type: 'LOAD_START' }
-  | { type: 'LOAD_SUCCESS'; epoch: number; entity: E | undefined }
-  | { type: 'LOAD_FAILURE'; epoch: number; message: string }
-  | { type: 'LOAD_RETIRED' } // netexId removed: abandon in-flight load
-  | { type: 'SAVE_START' }
-  | { type: 'SAVE_SUCCESS'; epoch: number; entity: E | undefined }
-  | { type: 'SAVE_FAILURE'; epoch: number; fieldErrors: Record<string, string> }
-  | { type: 'SAVE_SETTLED' } // release `saving` — deliberately never epoch-gated
-  | { type: 'EDIT'; value: E | undefined }
-  | { type: 'RESET' }; // discard edits: value ← baseline
-
-function entityFormReducer<E>(
-  state: EntityFormState<E>,
-  action: EntityFormAction<E>,
-): EntityFormState<E> {
-  switch (action.type) {
-    case 'LOAD_START':
-      return { ...state, loading: true, load: 'pending', epoch: state.epoch + 1 };
-    case 'LOAD_SUCCESS':
-      if (action.epoch !== state.epoch) return state;
-      return { ...state, loading: false, load: 'ok', value: action.entity, baseline: action.entity, errors: {} };
-    case 'LOAD_FAILURE':
-      if (action.epoch !== state.epoch) return state;
-      return { ...state, loading: false, load: 'error', errors: { __init: action.message } };
-    case 'LOAD_RETIRED':
-      // Keep any locally edited value (create mode), just stop waiting on the
-      // retired load. Bumping epoch makes its late response a no-op. Must not
-      // touch `saving` — an in-flight mutation outlives the load it raced.
-      return { ...state, loading: false, load: 'idle', epoch: state.epoch + 1 };
-    case 'SAVE_START':
-      return { ...state, saving: true, epoch: state.epoch + 1 };
-    case 'SAVE_SUCCESS':
-      if (action.epoch !== state.epoch) return state;
-      return { ...state, value: action.entity, baseline: action.entity, errors: {} };
-    case 'SAVE_FAILURE':
-      if (action.epoch !== state.epoch) return state;
-      return { ...state, errors: action.fieldErrors };
-    case 'SAVE_SETTLED':
-      // This save owns the flag: release it whenever still mounted. Never
-      // gated on epoch *or* on a status enum — a load racing the save must
-      // not be able to strand or steal it.
-      return { ...state, saving: false };
-    case 'EDIT':
-      return { ...state, value: action.value };
-    case 'RESET': {
-      // Local discard — no epoch bump and no request: the baseline is already
-      // the server's last word, so a refetch would only re-fetch what we hold.
-      // Errors go with the edits that caused them, except `__init`: a *re*load
-      // (netexId switch, org switch) fails without clearing the entity already
-      // on screen, so a load error can coexist with an editable value. It
-      // describes the record, not the edit session, and `load` stays 'error'
-      // with consumers rendering that message — dropping it here would leave
-      // them rendering an empty error.
-      const { __init } = state.errors;
-      return { ...state, value: state.baseline, errors: __init ? { __init } : {} };
-    }
+/**
+ * Merge static and dynamic headers for one request.
+ *
+ * Resolved per request rather than held in state: state made every inline
+ * `headers`/`getHeaders` literal mint a new identity, and re-reading `getHeaders`
+ * here is what picks up a refreshed token.
+ *
+ * @param stat static headers from context
+ * @param dyn dynamic header source from context; wins over `stat`
+ * @returns the merged header map
+ */
+const resolveHeaders = async (
+  stat?: Record<string, string>,
+  dyn?: () => Record<string, string> | Promise<Record<string, string>>,
+): Promise<Record<string, string>> => {
+  const base = stat ? { ...stat } : {};
+  if (!dyn) return base;
+  try {
+    return { ...base, ...(await dyn()) };
+  } catch {
+    // Failure to load dynamic headers should not silently block the form.
+    // Fall back to static headers; downstream requests will fail visibly.
+    return base;
   }
+};
+
+/**
+ * One record's load, tagged with the identity that asked for it.
+ *
+ * That tag is what replaced the epoch counter: a response is applied because
+ * the key that asked for it is still the current one, not because a counter
+ * agrees. It carries the tenant and the endpoint as well as the id, so a row
+ * fetched under one org can never land in a form showing another.
+ */
+export interface EntityResource<E> {
+  key: string;
+  load: Promise<Loaded<E>>;
 }
 
-const INITIAL_STATE: EntityFormState<any> = {
-  value: undefined,
-  baseline: undefined,
-  loading: false,
-  saving: false,
-  errors: {},
-  epoch: 0,
-  load: 'idle',
-};
+/**
+ * Start — and hold — the load for one record.
+ *
+ * **Must be called above the `<Suspense>` boundary the form reads behind.**
+ * `use()` needs the same promise object on every attempt at a render, and a
+ * component that suspends on its *first* render is discarded whole, hooks
+ * included: a ref inside the suspending component cannot survive to hold it.
+ * The component that renders the boundary never suspends, so its ref can. That
+ * is the entire reason this is a second hook and not three lines of the first.
+ *
+ * @param config the entity's static query/mutation wiring
+ * @param netexId record to load; omitted → create mode, which loads nothing
+ * @returns the record's resource, or `null` in create mode
+ */
+export function useEntityResource<E>(
+  config: EntityFormConfig,
+  netexId?: string,
+): EntityResource<E> | null {
+  // Ambient session inputs from the provider — the hook requires it (the throw
+  // is intended). None of them are ref-guarded: nothing here runs off an
+  // effect's dependency list, so a provider re-render with fresh inline
+  // literals cannot re-fire a load or clobber in-progress edits.
+  const { endpoint, headers, getHeaders, dataOwnerRef } = useSobekCtx();
+  const { query } = config;
+  const key = netexId ? `${endpoint}|${dataOwnerRef}|${netexId}` : CREATE_KEY;
+
+  const slot = useRef<EntityResource<E> | null>(null);
+  if (key === CREATE_KEY) {
+    // Dropped rather than kept, so that returning to a record refetches it
+    // instead of replaying the response the form left with.
+    slot.current = null;
+  } else if (slot.current?.key !== key) {
+    /** Fetch the record. Never rejects — see {@link Loaded}. */
+    const load = (async (): Promise<Loaded<E>> => {
+      try {
+        const client = new GraphQLClient(endpoint, {
+          headers: await resolveHeaders(headers, getHeaders),
+        });
+        const data = await client.request(query.document, query.variables(netexId!, dataOwnerRef));
+        return { ok: true, entity: pluck(data, query.resultPath) as E | undefined };
+      } catch (e) {
+        // Empty registry by design: the query takes a netexId, not an `input`,
+        // so there are no field paths to route to and every message is general.
+        const { generalErrors } = normalizeEntityErrors(e, {});
+        return { ok: false, messages: generalErrors.length ? generalErrors : [LOAD_ERR] };
+      }
+    })();
+    slot.current = { key, load };
+  }
+  return slot.current;
+}
 
 // Internal hook — accepts generic E to type the returned entity shape.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export function useEntityForm<E>(props: UseEntityFormProps) {
-  const { netexId, onSaved, onError, onChange, onDirtyChange } = props;
-  // Ambient session inputs from the provider — the hook requires it (the
-  // throw is intended). `dataOwnerRef` joins the load-effect deps below (an
-  // org switch must re-fire every mounted load); `headers`/`getHeaders` stay
-  // ref-guarded so provider re-renders never clobber in-flight edits.
+export function useEntityForm<E>(props: UseEntityFormProps<E>) {
+  const { fields, query, mutation, resource, onSaved, onError, onChange, onDirtyChange } = props;
+  // Session inputs for the *save* half. The load half reads its own copy in
+  // `useEntityResource`, above the boundary.
   const { endpoint, headers, getHeaders, dataOwnerRef } = useSobekCtx();
 
-  const client = useMemo(() => new GraphQLClient(endpoint), [endpoint]);
+  const key = resource?.key ?? CREATE_KEY;
 
-  const [state, dispatch] = useReducer(
-    entityFormReducer<E>,
-    INITIAL_STATE as EntityFormState<E>,
-  );
-  const { value, baseline, errors, loading, saving, load } = state;
+  // Suspends until the record settles. A load left behind by a netexId change —
+  // or by a switch into create mode — resolves into a render nobody performs,
+  // which is the whole of the staleness story on this half.
+  const res = resource ? use(resource.load) : undefined;
+
+  // Last entity the server actually handed back. Read only when there is no
+  // current one: a *failed* reload and a switch into create mode both have to
+  // leave the record on screen rather than blank the form. A ref, not state —
+  // it is written from the render that already produced the value, and read
+  // only on renders some other change has triggered.
+  const held = useRef<E | undefined>(undefined);
+  if (res?.ok) held.current = res.entity;
+
+  // What a save moved forward, tagged with the key it belongs to. That tag is
+  // the save's staleness guard, by identity: a save landing after the form
+  // switched records writes under a key nobody reads.
+  const [saved, setSaved] = useState<{ key: string; entity: E | undefined } | null>(null);
+  const [draft, setDraft] = useState<E | undefined>(undefined);
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>(NO_ERRORS);
+
+  // Discard the draft when the record changes — a new record must not be
+  // masked by the previous one's edits. Not when the *host* drops netexId
+  // (edit -> create), which is documented to preserve in-progress edits.
+  const [prevKey, setPrevKey] = useState(key);
+  if (key !== prevKey) {
+    setPrevKey(key);
+    if (key !== CREATE_KEY) {
+      setDraft(undefined);
+      setSaveErrors(NO_ERRORS);
+    }
+  }
+
+  // The server's last word on the record now on screen, and the edited value
+  // over it. This pair replaces the reducer's `value`/`baseline`: an untouched
+  // form *is* its baseline, so a load or a save leaves it clean with nothing
+  // to re-baseline.
+  const baseline = saved?.key === key ? saved.entity : res?.ok ? res.entity : held.current;
+  const value = draft ?? baseline;
   const dirty = useMemo(() => isDirty(value, baseline), [value, baseline]);
 
-  const setValue = useCallback(
-    (v: E | undefined) => dispatch({ type: 'EDIT', value: v }),
-    [],
+  const load: LoadPhase = !res ? 'idle' : res.ok ? 'ok' : 'error';
+
+  // Load messages render as one line; the host gets them unjoined via `onError`.
+  const errors = useMemo(
+    () => (res && !res.ok ? { ...saveErrors, __init: res.messages.join('; ') } : saveErrors),
+    [res, saveErrors],
   );
+
+  const setValue = useCallback((v: E | undefined) => setDraft(v), []);
 
   // Cancel an edit session in place. The alternative hosts use today — remount
   // the form under a new `key` — throws away the loaded entity and re-fetches
-  // it; this restores the baseline the hook already holds.
-  const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
+  // it; this restores the baseline the hook already holds. `errors.__init` is
+  // not cleared: it is derived from the load, and a failed *re*load describes
+  // the record, not the edit session being discarded.
+  const reset = useCallback(() => {
+    setDraft(undefined);
+    setSaveErrors(NO_ERRORS);
+  }, []);
 
-  const mounted = useRef(true);
-useEffect(() => {
-  mounted.current = true;
-  return () => { mounted.current = false; };
-}, []);
-
-  // Epoch counter for tagging actions from async closures. Bumped in lockstep
-  // with every START/RETIRE dispatch so a closure can capture the epoch it
-  // belongs to synchronously. Never gates rendered state — the reducer decides
-  // what is stale via its own epoch.
-  const epochRef = useRef(0);
-
-  // Keep the config objects in refs so they don't trigger effect re-runs or
-  // callback re-creation when the caller passes fresh inline literals each render.
-  // The public API contract treats these as stable configuration.
-  const fieldsRef = useRef(props.fields);
-  const queryRef = useRef(props.query);
-  const mutationRef = useRef(props.mutation);
-  const headersRef = useRef(headers);
-  const getHeadersRef = useRef(getHeaders);
-  // Same reasoning for `onError`, which the load effect below calls: a host
-  // passing an inline arrow would otherwise put a fresh identity in the effect's
-  // deps every render and re-fire the load. `handleSave` reads it from props
-  // directly — a callback, not an effect, so re-creating it is harmless.
+  // Host callbacks fire from effects below, so they are ref-held: an inline
+  // arrow in a dependency list would re-fire on every render.
   const onErrorRef = useRef(onError);
-  useEffect(() => { fieldsRef.current = props.fields; }, [props.fields]);
-  useEffect(() => { queryRef.current = props.query; }, [props.query]);
-  useEffect(() => { mutationRef.current = props.mutation; }, [props.mutation]);
-  useEffect(() => { headersRef.current = headers; }, [headers]);
-  useEffect(() => { getHeadersRef.current = getHeaders; }, [getHeaders]);
-  useEffect(() => { onErrorRef.current = onError; }, [onError]);
-  // Same ref treatment for the observation callbacks: they fire from effects
-  // below, so an inline host arrow in the deps would re-fire on every render.
   const onChangeRef = useRef(onChange);
   const onDirtyChangeRef = useRef(onDirtyChange);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
   useEffect(() => { onDirtyChangeRef.current = onDirtyChange; }, [onDirtyChange]);
 
+  // A failed load reaches the host once per record. `res` is the settled result
+  // for the current key, so a retired or superseded load — whose result nobody
+  // reads — cannot pop an error for a form that has already moved on.
+  useEffect(() => {
+    if (res && !res.ok) onErrorRef.current?.(res.messages);
+  }, [res]);
+
   // Report value/dirty transitions to the host. Both guard on the previous
-  // value so a re-render that did not move the form stays silent, and neither
-  // fires on mount (both start at the state they are initialised to).
-  const prevValue = useRef(value);
+  // value so a re-render that did not move the form stays silent.
+  //
+  // `prevValue` starts at `undefined`, not at `value`: the first commit already
+  // carries the loaded record (there is no pre-load commit to miss any more),
+  // so seeding it with `value` would swallow the load the host is listening
+  // for. A create-mode mount still stays silent — undefined has not moved.
+  const prevValue = useRef<E | undefined>(undefined);
   useEffect(() => {
     if (prevValue.current === value) return;
     prevValue.current = value;
@@ -233,134 +286,70 @@ useEffect(() => {
     onDirtyChangeRef.current?.(dirty);
   }, [dirty]);
 
-  // Resolve headers (static + dynamic) per request rather than into state.
-  // Holding them in state made every inline `headers`/`getHeaders` literal mint a
-  // new identity -> new state object -> load effect re-run -> in-progress edits
-  // overwritten by the server entity. Resolving on demand also means getHeaders()
-  // is re-read on every request, so a refreshed token is picked up.
-  const resolveHeaders = useCallback(async (): Promise<Record<string, string>> => {
-    const base = headersRef.current ? { ...headersRef.current } : {};
-    const getDyn = getHeadersRef.current;
-    if (!getDyn) return base;
-    try {
-      return { ...base, ...(await getDyn()) };
-    } catch {
-      // Failure to load dynamic headers should not silently block the form.
-      // Fall back to static headers; downstream requests will fail visibly.
-      return base;
-    }
-  }, []);
+  // Save + refetch, as a React 19 Action: `saving` is the transition's own
+  // pending flag, held for the whole async body and released when it settles.
+  // That is what retires the `SAVE_SETTLED` dispatch and the `mounted` ref —
+  // React owns both the flag and the unmounted case.
+  const [saving, startSave] = useTransition();
 
-  // Load entity by netexId. Staleness is decided by the reducer via epochs —
-  // the closures below just tag their completion with the epoch they started at.
-  useEffect(() => {
-    // Create mode (netexId omitted): keep any locally edited value, but retire
-    // any load still in flight for the previous netexId — otherwise its late
-    // response passes the epoch check and repopulates the create form (and
-    // `loading` never clears if it never resolves).
-    if (!netexId) {
-      if (mounted.current) {
-        epochRef.current++;
-        dispatch({ type: 'LOAD_RETIRED' });
-      }
-      return;
-    }
-
-    const query = queryRef.current;
-    const epoch = ++epochRef.current;
-    dispatch({ type: 'LOAD_START' });
-
-    resolveHeaders()
-      .then(authHeaders => {
-        client.setHeaders(authHeaders);
-        return client.request(query.document, query.variables(netexId, dataOwnerRef));
-      })
-      .then((data: any) => {
-        if (!mounted.current) return;
-        const entity = query.resultPath.reduce((o: any, k: string | number) => o?.[k], data);
-        dispatch({ type: 'LOAD_SUCCESS', epoch, entity });
-      })
-      .catch(e => {
-        // Unlike the dispatches above, the epoch check here is not redundant
-        // with the reducer's: `onError` is a call into host code and has no
-        // reducer to discard it. Without the guard a load retired by
-        // LOAD_RETIRED (netexId cleared) or superseded by a newer one still
-        // pops an error for a form that has already moved on.
-        if (!mounted.current || epoch !== epochRef.current) return;
-        // Empty registry by design: the query takes a netexId, not an `input`,
-        // so there are no field paths to route to and every message is general.
-        // Passing the real `fields` would happen to work today (a query error's
-        // path has no 'input' segment) but would be relying on an accident.
-        const { generalErrors } = normalizeEntityErrors(e, {});
-        const general = generalErrors.length ? generalErrors : [LOAD_ERR];
-        // `__init` is one string (it renders as one line); the host gets them
-        // unjoined so it can localize or triage per message.
-        dispatch({ type: 'LOAD_FAILURE', epoch, message: general.join('; ') });
-        onErrorRef.current?.(general);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, netexId, resolveHeaders, dataOwnerRef]);
-
-  // Save + refetch
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(() => {
     if (!value) return;
-    const query = queryRef.current;
-    const mutation = mutationRef.current;
-    const fields = fieldsRef.current;
+    startSave(async () => {
+      try {
+        const client = new GraphQLClient(endpoint, {
+          headers: await resolveHeaders(headers, getHeaders),
+        });
+        // dataOwnerRef is stamped from context at the wire edge, never sourced
+        // from form state — a value loaded under one org must never be written
+        // back under another. Driven by the registry, not by the key: an entity
+        // whose Input has no dataOwnerRef (or where distill derived it as
+        // serverManaged) must not get one, or every save fails validation.
+        // `fields` is distilled from the patched schema, so it can yield keys the
+        // live schema has never heard of; the mask is read from the live schema
+        // and drops them here, at the wire edge, leaving the form model intact.
+        const writable = reduceToSobekInput(toInputEntity(value, fields), mutation.inputKeys);
+        const input = fields[OWNER_FIELD]?.locked
+          ? { ...writable, [OWNER_FIELD]: dataOwnerRef }
+          : writable;
+        const data = await client.request(mutation.document, { input });
+        const returnedId: string = pluck(data, mutation.resultPath);
 
-    const epoch = ++epochRef.current;
-    dispatch({ type: 'SAVE_START' });
-    try {
-      client.setHeaders(await resolveHeaders());
-      // dataOwnerRef is stamped from context at the wire edge, never sourced
-      // from form state — a value loaded under one org must never be written
-      // back under another. Driven by the registry, not by the key: an entity
-      // whose Input has no dataOwnerRef (or where distill derived it as
-      // serverManaged) must not get one, or every save fails validation.
-      // `fields` is distilled from the patched schema, so it can yield keys the
-      // live schema has never heard of; the mask is read from the live schema
-      // and drops them here, at the wire edge, leaving the form model intact.
-      const writable = reduceToSobekInput(toInputEntity(value, fields), mutation.inputKeys);
-      const input = fields[OWNER_FIELD]?.locked
-        ? { ...writable, [OWNER_FIELD]: dataOwnerRef }
-        : writable;
-      const data: any = await client.request(mutation.document, { input });
-      const returnedId: string = mutation.resultPath.reduce((o: any, k: string | number) => o?.[k], data);
+        const refreshedData = await client.request(
+          query.document,
+          query.variables(returnedId, dataOwnerRef),
+        );
+        const refreshed = pluck(refreshedData, query.resultPath) as E | undefined;
 
-      // Guard against concurrent save+netexId changes: abort the refetch if
-      // another request (load or save) has started in the meantime.
-      if (epoch !== epochRef.current || !mounted.current) return;
-
-      const refreshedData: any = await client.request(
-        query.document,
-        query.variables(returnedId, dataOwnerRef)
-      );
-      const refreshed = query.resultPath.reduce((o: any, k: string | number) => o?.[k], refreshedData);
-
-      if (mounted.current && epoch === epochRef.current) {
-        dispatch({ type: 'SAVE_SUCCESS', epoch, entity: refreshed });
+        held.current = refreshed;
+        // Tagged with the key this save started under, so a form that switched
+        // records meanwhile ignores it. In create mode that key is CREATE_KEY,
+        // which is how a created entity becomes the baseline with no reload.
+        setSaved({ key, entity: refreshed });
+        setDraft(undefined);
+        setSaveErrors(NO_ERRORS);
         onSaved?.(returnedId);
-      }
-    } catch (e) {
-      if (mounted.current && epoch === epochRef.current) {
+      } catch (e) {
         const { fieldErrors, generalErrors } = normalizeEntityErrors(e, fields);
-        dispatch({ type: 'SAVE_FAILURE', epoch, fieldErrors });
+        setSaveErrors(fieldErrors);
         // Transport/unknown errors carry no GraphQL error array — without a
         // fallback the save would fail entirely silently.
         const general =
-          generalErrors.length || Object.keys(fieldErrors).length
-            ? generalErrors
-            : [SAVE_ERR];
-        if (general.length) onError?.(general);
+          generalErrors.length || Object.keys(fieldErrors).length ? generalErrors : [SAVE_ERR];
+        if (general.length) onErrorRef.current?.(general);
       }
-    } finally {
-      // This save owns the flag, so release it whenever still mounted — gating on
-      // epoch leaves it stuck true if a load bumped the epoch mid-save.
-      // (With genuinely concurrent saves the older one clears first; acceptable
-      // for a single boolean, revisit if concurrent saves become real.)
-      if (mounted.current) dispatch({ type: 'SAVE_SETTLED' });
-    }
-  }, [value, client, resolveHeaders, dataOwnerRef, onSaved, onError]);
+    });
+  }, [
+    value,
+    key,
+    endpoint,
+    headers,
+    getHeaders,
+    dataOwnerRef,
+    fields,
+    query,
+    mutation,
+    onSaved,
+  ]);
 
-  return { value, setValue, reset, loading, saving, load, dirty, errors, handleSave };
+  return { value, setValue, reset, saving, load, dirty, errors, handleSave };
 }

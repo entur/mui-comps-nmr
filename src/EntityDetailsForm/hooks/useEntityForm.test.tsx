@@ -1,21 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { render, renderHook, waitFor, act, type RenderResult } from '@testing-library/react';
+import { Suspense, useEffect, type ReactNode } from 'react';
 import type { UseEntityFormProps } from './useEntityForm';
-import { useEntityForm } from './useEntityForm';
+import { useEntityForm, useEntityResource } from './useEntityForm';
 import type { FieldSpec } from '../types';
 import { SobekProvider, type SobekCtx } from '../../context/SobekContext';
 
 const mockFns = vi.hoisted(() => ({
   request: vi.fn(),
-  setHeaders: vi.fn(),
+  /** Records every `new GraphQLClient(endpoint, config)` — one per request now,
+   *  so the headers a request went out with are visible per call. */
+  ctor: vi.fn(),
 }));
 
 vi.mock('graphql-request', () => ({
   __esModule: true,
-  GraphQLClient: vi.fn().mockImplementation(function (this: any) {
+  GraphQLClient: vi.fn().mockImplementation(function (this: any, endpoint: string, cfg: unknown) {
+    mockFns.ctor(endpoint, cfg);
     this.request = mockFns.request;
-    this.setHeaders = mockFns.setHeaders;
   }),
 }));
 
@@ -44,11 +46,44 @@ const wireKeys = { netexId: 1, name: 1, dataOwnerRef: 1 };
 /** Wraps an entity in the query's `vehicles.content[0]` result envelope. */
 const envelope = (entity: unknown) => ({ vehicles: { content: [entity] } });
 
+/** Headers the client was constructed with for the nth request (1-based). */
+const headersOfCall = (n: number) =>
+  (mockFns.ctor.mock.calls[n - 1]?.[1] as { headers: Record<string, string> })?.headers;
+
 /**
- * The ambient session inputs the hook reads. Tests mutate this between
- * renders (then `rerender`) to simulate the host re-rendering the provider.
+ * The ambient session inputs the hooks read. Tests mutate this between renders
+ * (then re-render) to simulate the host re-rendering the provider.
  */
 let ctx: SobekCtx;
+
+/** What a test passes: the hook's props minus the resource, plus the id. */
+type TestProps = Omit<UseEntityFormProps, 'resource'> & { netexId?: string };
+
+/** The last committed hook return — `null` while the form is suspended. */
+type Api = ReturnType<typeof useEntityForm>;
+const api: { current: Api } = { current: null as unknown as Api };
+
+/** Captures the hook return on commit only, as RTL's own `renderHook` does. */
+const Probe = ({ hookProps }: { hookProps: UseEntityFormProps }) => {
+  const r = useEntityForm(hookProps);
+  useEffect(() => { api.current = r; });
+  return null;
+};
+
+/**
+ * The shape the generated wrapper has: the resource is started *above* the
+ * boundary and the form reads it inside. Testing the two hooks apart from that
+ * arrangement would test something no consumer can build.
+ */
+const Harness = ({ p }: { p: TestProps }) => {
+  const { netexId, ...config } = p;
+  const resource = useEntityResource<any>(config, netexId);
+  return (
+    <Suspense fallback={null}>
+      <Probe hookProps={{ ...config, resource }} />
+    </Suspense>
+  );
+};
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <SobekProvider value={ctx}>{children}</SobekProvider>
@@ -58,12 +93,12 @@ const wrapper = ({ children }: { children: ReactNode }) => (
  * Builds hook props with the standard Vehicle query/mutation config.
  *
  * Every call mints fresh object literals — matching a host that passes inline
- * props each render, which the hook must tolerate without re-loading.
+ * props each render, which the hooks must tolerate without re-loading.
  *
- * @param {Partial<UseEntityFormProps>} over - per-test overrides (netexId, callbacks…).
- * @returns {UseEntityFormProps} props ready for `renderHook`.
+ * @param {Partial<TestProps>} over - per-test overrides (netexId, callbacks…).
+ * @returns {TestProps} props ready for the harness.
  */
-const mkProps = (over: Partial<UseEntityFormProps> = {}): UseEntityFormProps => ({
+const mkProps = (over: Partial<TestProps> = {}): TestProps => ({
   fields,
   query: {
     document: vehicleDoc,
@@ -80,52 +115,105 @@ const mkProps = (over: Partial<UseEntityFormProps> = {}): UseEntityFormProps => 
   ...over,
 });
 
-const renderForm = (props: UseEntityFormProps) =>
-  renderHook((p: UseEntityFormProps) => useEntityForm(p), { initialProps: props, wrapper });
+/**
+ * Mount the form inside an **awaited** `act`.
+ *
+ * A render that suspends parks its retry on the act queue, and a synchronous
+ * `act` — which is what RTL's bare `render` uses — has already exited by then,
+ * so the tree never resumes. Awaiting the scope that contains the suspending
+ * render is the supported pattern, which is why every mount and every record
+ * switch below goes through one of these two helpers.
+ */
+const mount = async (props: TestProps) => {
+  let utils!: RenderResult;
+  await act(async () => { utils = render(<Harness p={props} />, { wrapper }); });
+  return {
+    result: api,
+    rerender: (next: TestProps) => utils.rerender(<Harness p={next} />),
+  };
+};
+
+/** Re-render with new props, awaiting the suspension a record switch causes. */
+const swap = async (
+  rerender: (p: TestProps) => void,
+  props: TestProps,
+): Promise<void> => {
+  await act(async () => { rerender(props); });
+};
+
+/** Let a pending microtask chain (a settled load, a save's two hops) drain. */
+const settle = () => act(async () => { await new Promise(r => setTimeout(r, 0)); });
+
+/**
+ * Press Save and let the action run to completion.
+ *
+ * The save is a React 19 Action, so `saving` is the transition's pending flag —
+ * released when the async body settles, which is a queued update like any
+ * other and needs an awaited `act` to reach the test.
+ */
+const save = async (): Promise<void> => {
+  await act(async () => {
+    api.current.handleSave();
+    await new Promise(r => setTimeout(r, 0));
+  });
+};
 
 describe('useEntityForm', () => {
   beforeEach(() => {
     mockFns.request.mockReset();
-    mockFns.setHeaders.mockReset();
+    mockFns.ctor.mockReset();
+    api.current = null as unknown as Api;
     ctx = { endpoint: ENDPOINT, dataOwnerRef: OWNER_REF };
   });
 
   it('throws when no SobekProvider is above', () => {
-    expect(() => renderHook(() => useEntityForm(mkProps({ netexId: 'VEH:1' })))).toThrow(
-      'mui-comps-nmr: this component must be rendered inside a <SobekProvider>'
-    );
+    // The resource hook is the first to touch the session, so it is the one
+    // that throws — before a request can be built with an undefined endpoint.
+    expect(() =>
+      renderHook(() => useEntityResource(mkProps(), 'VEH:1'))
+    ).toThrow('mui-comps-nmr: this component must be rendered inside a <SobekProvider>');
   });
 
   it('loads an entity on mount when netexId is provided', async () => {
     mockFns.request.mockResolvedValueOnce(envelope(TRAM));
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1' }));
 
-    expect(result.current.loading).toBe(true);
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current).not.toBeNull());
 
     expect(result.current.value).toEqual(TRAM);
+    expect(result.current.load).toBe('ok');
     expect(result.current.errors).toEqual({});
     expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, {
       filter: { netexIds: ['VEH:1'], dataOwnerRef: OWNER_REF },
     });
   });
 
+  it('does not commit at all while the record is in flight', async () => {
+    // The structural replacement for the old `loading === true`, and the reason
+    // a not-found branch can no longer flash: there is no first commit to flash
+    // on. The boundary holds its fallback, and the hook has not returned.
+    mockFns.request.mockReturnValueOnce(new Promise(() => {}));
+
+    const { result } = await mount(mkProps({ netexId: 'VEH:1' }));
+
+    expect(result.current).toBeNull();
+  });
+
   it('keeps the loaded value when netexId is removed (create mode preserves edits)', async () => {
     mockFns.request.mockResolvedValueOnce(envelope(TRAM));
 
-    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
 
-    await waitFor(() => expect(result.current.value).toEqual(TRAM));
+    await waitFor(() => expect(result.current?.value).toEqual(TRAM));
 
-    rerender(mkProps());
+    await swap(rerender, mkProps());
 
-    // Removing netexId no longer wipes state: the load effect early-returns on a
-    // missing netexId (create mode), so any in-progress value is preserved rather
-    // than cleared.
+    // Removing netexId no longer wipes state: there is no key, so no request and
+    // nothing to suspend on, and the entity the server last handed back is still
+    // what the form holds.
     expect(result.current.value).toEqual(TRAM);
-    expect(result.current.loading).toBe(false);
+    expect(result.current.load).toBe('idle');
   });
 
   it('invalidates an in-flight load when switching to create mode', async () => {
@@ -136,28 +224,28 @@ describe('useEntityForm', () => {
       })
     );
 
-    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
 
-    await waitFor(() => expect(result.current.loading).toBe(true));
+    expect(result.current).toBeNull();
 
     // Host drops netexId (edit -> create) while the load is still in flight.
-    rerender(mkProps());
-    expect(result.current.loading).toBe(false);
+    await swap(rerender, mkProps());
+    expect(result.current.value).toBeUndefined();
 
-    // The late response belongs to the abandoned edit form — it must not
-    // repopulate the create form.
+    // The late response belongs to the abandoned edit form. Nothing reads its
+    // promise any more, so it repopulates nothing — no epoch check involved.
     act(() => resolveLoad(envelope(TRAM)));
-    await new Promise(r => setTimeout(r, 50));
+    await settle();
 
     expect(result.current.value).toBeUndefined();
-    expect(result.current.loading).toBe(false);
+    expect(result.current.load).toBe('idle');
   });
 
-  it('does not load when netexId is omitted', () => {
-    const { result } = renderForm(mkProps());
+  it('does not load when netexId is omitted', async () => {
+    const { result } = await mount(mkProps());
 
     expect(result.current.value).toBeUndefined();
-    expect(result.current.loading).toBe(false);
+    expect(result.current.load).toBe('idle');
     expect(mockFns.request).not.toHaveBeenCalled();
   });
 
@@ -171,13 +259,16 @@ describe('useEntityForm', () => {
       },
     });
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:99', onError }));
+    const { result } = await mount(mkProps({ netexId: 'VEH:99', onError }));
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current).not.toBeNull());
+    // A failed load is a settled *value*, not a rejected promise: rethrowing it
+    // out of `use()` would hit an error boundary and unmount the form.
+    expect(result.current.load).toBe('error');
     // The load half mirrors the save half: the server's own words reach the
     // host, not a constant that flattens 401/403/404/socket-drop into one string.
     expect(result.current.errors).toEqual({ __init: 'Not found' });
-    expect(onError).toHaveBeenCalledWith(['Not found']);
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(['Not found']));
     expect(result.current.value).toBeUndefined();
   });
 
@@ -185,11 +276,11 @@ describe('useEntityForm', () => {
     const onError = vi.fn();
     mockFns.request.mockRejectedValueOnce(new Error('boom'));
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:99', onError }));
+    const { result } = await mount(mkProps({ netexId: 'VEH:99', onError }));
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current).not.toBeNull());
     expect(result.current.errors).toEqual({ __init: 'Failed to load' });
-    expect(onError).toHaveBeenCalledWith(['Failed to load']);
+    await waitFor(() => expect(onError).toHaveBeenCalledWith(['Failed to load']));
   });
 
   it('joins multiple load errors for display but hands onError the array', async () => {
@@ -200,11 +291,29 @@ describe('useEntityForm', () => {
       },
     });
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:99', onError }));
+    const { result } = await mount(mkProps({ netexId: 'VEH:99', onError }));
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current).not.toBeNull());
     expect(result.current.errors).toEqual({ __init: 'Unauthorized; Token expired' });
-    expect(onError).toHaveBeenCalledWith(['Unauthorized', 'Token expired']);
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(['Unauthorized', 'Token expired'])
+    );
+  });
+
+  it('reports a failed load to onError exactly once', async () => {
+    const onError = vi.fn();
+    mockFns.request.mockRejectedValueOnce(new Error('boom'));
+
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:99', onError }));
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+
+    // Re-rendering re-reads the same settled result; the host must not hear
+    // about the same failure again on every render of the form.
+    await swap(rerender, mkProps({ netexId: 'VEH:99', onError }));
+    act(() => result.current.setValue({ netexId: 'VEH:99' } as any));
+    await settle();
+
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 
   it('does not call onError for a load retired before it failed', async () => {
@@ -216,19 +325,17 @@ describe('useEntityForm', () => {
       })
     );
 
-    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1', onError }));
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1', onError }));
 
-    await waitFor(() => expect(result.current.loading).toBe(true));
+    expect(result.current).toBeNull();
 
     // Host drops netexId (edit -> create) while the load is still in flight.
-    rerender(mkProps({ onError }));
+    await swap(rerender, mkProps({ onError }));
 
-    // The failure belongs to the abandoned edit form. The reducer discards the
-    // dispatch on its own epoch check, but a callback has no reducer to protect
-    // it — without an explicit guard the host pops an error for a form that has
-    // already moved on.
+    // The failure belongs to the abandoned edit form. Its result is never read,
+    // so there is no callback to suppress and no guard to get wrong.
     act(() => rejectLoad(new Error('boom')));
-    await new Promise(r => setTimeout(r, 50));
+    await settle();
 
     expect(onError).not.toHaveBeenCalled();
     expect(result.current.errors).toEqual({});
@@ -248,25 +355,51 @@ describe('useEntityForm', () => {
 
     mockFns.request.mockResolvedValueOnce(envelope(TRAM));
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1' }));
 
-    // Should not issue the request while dynamic headers are still pending —
-    // but the load is already in flight, so the form reports `loading`.
-    expect(result.current.loading).toBe(true);
+    // Nothing has been requested while the dynamic headers are pending, and the
+    // form has not committed either.
+    expect(result.current).toBeNull();
     expect(mockFns.request).not.toHaveBeenCalled();
 
     act(() => resolveHeaders({ Authorization: 'Bearer token' }));
 
     await waitFor(() => expect(mockFns.request).toHaveBeenCalled());
+    await waitFor(() => expect(result.current).not.toBeNull());
 
     expect(result.current.value).toEqual(TRAM);
-    expect(mockFns.setHeaders).toHaveBeenLastCalledWith({
-      'Client-Name': 'hathor',
-      Authorization: 'Bearer token',
+    // Headers go to the constructor of a client built for this request — there
+    // is no long-lived client to mutate, so a token refresh mid-flight cannot
+    // re-header a request that is already out.
+    expect(mockFns.ctor).toHaveBeenLastCalledWith(ENDPOINT, {
+      headers: { 'Client-Name': 'hathor', Authorization: 'Bearer token' },
     });
     expect(mockFns.request).toHaveBeenCalledWith(vehicleDoc, {
       filter: { netexIds: ['VEH:1'], dataOwnerRef: OWNER_REF },
     });
+  });
+
+  it('gives each request its own client, so a refreshed token cannot re-header an older one', async () => {
+    let token = 0;
+    ctx = { ...ctx, getHeaders: () => ({ Authorization: `Bearer ${++token}` }) };
+
+    mockFns.request
+      .mockResolvedValueOnce(envelope(TRAM))
+      .mockResolvedValueOnce({ createOrUpdateVehicle: 'VEH:1' })
+      .mockResolvedValueOnce(envelope(TRAM));
+
+    const { result } = await mount(mkProps({ netexId: 'VEH:1' }));
+    await waitFor(() => expect(result.current).not.toBeNull());
+
+    act(() => result.current.setValue({ ...TRAM, name: { value: 'Edited' } } as any));
+    await save();
+    expect(result.current.saving).toBe(false);
+
+    // Two clients, two header sets. The old shared-client `setHeaders` could
+    // only ever hold the last one.
+    expect(mockFns.ctor).toHaveBeenCalledTimes(2);
+    expect(headersOfCall(1)).toEqual({ Authorization: 'Bearer 1' });
+    expect(headersOfCall(2)).toEqual({ Authorization: 'Bearer 2' });
   });
 
   it('ignores headers/getHeaders identity churn (no reload, edits preserved)', async () => {
@@ -283,19 +416,21 @@ describe('useEntityForm', () => {
     };
     churnCtx();
 
-    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
 
-    await waitFor(() => expect(result.current.value).toEqual(TRAM));
+    await waitFor(() => expect(result.current?.value).toEqual(TRAM));
     expect(mockFns.request).toHaveBeenCalledTimes(1);
 
     act(() => result.current.setValue({ netexId: 'VEH:1', name: { value: 'Edited' } } as any));
 
     churnCtx();
-    rerender(mkProps({ netexId: 'VEH:1' }));
+    await swap(rerender, mkProps({ netexId: 'VEH:1' }));
     churnCtx();
-    rerender(mkProps({ netexId: 'VEH:1' }));
-    await new Promise(r => setTimeout(r, 50));
+    await swap(rerender, mkProps({ netexId: 'VEH:1' }));
+    await settle();
 
+    // Neither headers nor getHeaders is part of the key, so no identity churn
+    // can reach the load. They are read fresh on the next request instead.
     expect(mockFns.request).toHaveBeenCalledTimes(1);
     expect(result.current.value).toEqual({ netexId: 'VEH:1', name: { value: 'Edited' } });
   });
@@ -305,14 +440,14 @@ describe('useEntityForm', () => {
       .mockResolvedValueOnce(envelope(TRAM))
       .mockResolvedValueOnce(envelope(BUS));
 
-    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
 
-    await waitFor(() => expect(result.current.value).toEqual(TRAM));
+    await waitFor(() => expect(result.current?.value).toEqual(TRAM));
     expect(mockFns.request).toHaveBeenCalledTimes(1);
 
     // Host switches organisation — same endpoint, new dataOwnerRef.
     ctx = { endpoint: ENDPOINT, dataOwnerRef: OTHER_REF };
-    rerender(mkProps({ netexId: 'VEH:1' }));
+    await swap(rerender, mkProps({ netexId: 'VEH:1' }));
 
     await waitFor(() => expect(mockFns.request).toHaveBeenCalledTimes(2));
     expect(mockFns.request).toHaveBeenNthCalledWith(2, vehicleDoc, {
@@ -332,51 +467,99 @@ describe('useEntityForm', () => {
       )
       .mockResolvedValueOnce(envelope(BUS));
 
-    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
 
-    await waitFor(() => expect(result.current.loading).toBe(true));
+    expect(result.current).toBeNull();
 
-    rerender(mkProps({ netexId: 'VEH:2' }));
+    await swap(rerender, mkProps({ netexId: 'VEH:2' }));
 
     // Resolve the newer request first.
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.value).toEqual(BUS);
+    await waitFor(() => expect(result.current?.value).toEqual(BUS));
 
     // Now resolve the stale request for VEH:1.
     act(() => resolveA(envelope(TRAM)));
+    await settle();
 
-    // The stale response must not overwrite the current value.
-    await new Promise(r => setTimeout(r, 50));
+    // The stale response belongs to a key the form no longer reads.
     expect(result.current.value).toEqual(BUS);
     expect(result.current.errors).toEqual({});
   });
 
-  it('clears saving when a concurrent load bumps requestId mid-save', async () => {
-    let resolveMutation: (data: unknown) => void = () => {};
+  it('does not read another tenant’s record when the org switches mid-load', async () => {
+    let resolveA: (data: unknown) => void = () => {};
 
     mockFns.request
-      .mockResolvedValueOnce(envelope(TRAM))
       .mockImplementationOnce(
         () => new Promise(resolve => {
-          resolveMutation = resolve;
+          resolveA = resolve;
         })
       )
-      .mockResolvedValue(envelope(BUS));
+      .mockResolvedValueOnce(envelope(BUS));
 
-    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
+    expect(result.current).toBeNull();
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    ctx = { endpoint: ENDPOINT, dataOwnerRef: OTHER_REF };
+    await swap(rerender, mkProps({ netexId: 'VEH:1' }));
+
+    await waitFor(() => expect(result.current?.value).toEqual(BUS));
+
+    // Same netexId, different tenant — the key carries dataOwnerRef, so the
+    // first org's row cannot land in the second org's form.
+    act(() => resolveA(envelope(TRAM)));
+    await settle();
+
+    expect(result.current.value).toEqual(BUS);
+  });
+
+  it('discards an in-progress edit when the record changes', async () => {
+    mockFns.request
+      .mockResolvedValueOnce(envelope(TRAM))
+      .mockResolvedValueOnce(envelope(BUS));
+
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
+    await waitFor(() => expect(result.current?.value).toEqual(TRAM));
+
+    act(() => result.current.setValue({ ...TRAM, name: { value: 'Edited' } } as any));
+    await swap(rerender, mkProps({ netexId: 'VEH:2' }));
+
+    // A draft belongs to the record it was typed into. Carrying it across would
+    // mask the new record with the previous one's edits.
+    await waitFor(() => expect(result.current.value).toEqual(BUS));
+    expect(result.current.dirty).toBe(false);
+  });
+
+  it('releases saving when the record switches mid-save', async () => {
+    const savedTram = { netexId: 'VEH:1', name: { value: 'Tram Saved' } };
+    let resolveMutation: (data: unknown) => void = () => {};
+
+    // Routed rather than queued: React holds a suspended update while an Action
+    // is pending, so the order the two requests go out in is React's to choose.
+    mockFns.request.mockImplementation((doc: unknown, vars: any) => {
+      if (doc === mutationDoc) return new Promise(resolve => { resolveMutation = resolve; });
+      return Promise.resolve(
+        vars.filter.netexIds[0] === 'VEH:2' ? envelope(BUS) : envelope(savedTram)
+      );
+    });
+
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
 
     act(() => result.current.setValue({ netexId: 'VEH:1', name: { value: 'Edited' } } as any));
-    act(() => { void result.current.handleSave(); });
-    await waitFor(() => expect(result.current.saving).toBe(true));
+    act(() => { result.current.handleSave(); });
+    expect(result.current.saving).toBe(true);
 
-    // A netexId change starts a load, bumping requestId out from under the save.
-    rerender(mkProps({ netexId: 'VEH:2' }));
+    // A netexId change lands while the mutation is still out.
+    await swap(rerender, mkProps({ netexId: 'VEH:2' }));
+
     act(() => resolveMutation({ createOrUpdateVehicle: 'VEH:1' }));
+    await settle();
 
-    // The save abandons its refetch, but must still release the saving flag.
-    await waitFor(() => expect(result.current.saving).toBe(false));
+    // The transition owns the flag, so it is released when the action settles —
+    // there is no branch left that could strand it.
+    expect(result.current.saving).toBe(false);
+    // …and the save's refetch is tagged with the key it started under, so it
+    // cannot overwrite the record the form moved to.
+    await waitFor(() => expect(result.current.value).toEqual(BUS));
   });
 
   it('surfaces a fallback error when a save fails with no GraphQL errors', async () => {
@@ -387,12 +570,13 @@ describe('useEntityForm', () => {
 
     const onError = vi.fn();
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onError }));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1', onError }));
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current).not.toBeNull());
 
-    await act(async () => result.current.handleSave());
-    await waitFor(() => expect(result.current.saving).toBe(false));
+    act(() => result.current.setValue({ ...TRAM, name: { value: 'Edited' } } as any));
+    await save();
+    expect(result.current.saving).toBe(false);
 
     expect(onError).toHaveBeenCalledWith(['Failed to save']);
   });
@@ -408,18 +592,17 @@ describe('useEntityForm', () => {
     const onSaved = vi.fn();
     const onError = vi.fn();
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onSaved, onError }));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1', onSaved, onError }));
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current).not.toBeNull());
 
     // Simulate an edit — including a garbage dataOwnerRef, which must not leak
     // into the payload: the wire value is stamped from context at the edge.
-    result.current.setValue({ ...updated, dataOwnerRef: 'GARBAGE' } as any);
-    await waitFor(() => expect((result.current.value as any)?.name?.value).toBe('Tram Updated'));
+    act(() => result.current.setValue({ ...updated, dataOwnerRef: 'GARBAGE' } as any));
+    expect((result.current.value as any)?.name?.value).toBe('Tram Updated');
 
-    await act(async () => result.current.handleSave());
-
-    await waitFor(() => expect(result.current.saving).toBe(false));
+    await save();
+    expect(result.current.saving).toBe(false);
 
     expect(mockFns.request).toHaveBeenNthCalledWith(2, mutationDoc, {
       input: { ...updated, dataOwnerRef: OWNER_REF },
@@ -434,17 +617,37 @@ describe('useEntityForm', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it('adopts the created entity as the baseline when saving in create mode', async () => {
+    const created = { netexId: 'VEH:9', name: { value: 'New Tram' } };
+    mockFns.request
+      .mockResolvedValueOnce({ createOrUpdateVehicle: 'VEH:9' })
+      .mockResolvedValueOnce(envelope(created));
+
+    const onSaved = vi.fn();
+    const { result } = await mount(mkProps({ onSaved }));
+
+    act(() => result.current.setValue({ name: { value: 'New Tram' } } as any));
+    expect(result.current.dirty).toBe(true);
+
+    await save();
+    expect(result.current.saving).toBe(false);
+
+    // Create mode has no record key, so the save records its result under that
+    // same absence — the created entity becomes the baseline with no reload.
+    expect(result.current.value).toEqual(created);
+    expect(result.current.dirty).toBe(false);
+    expect(onSaved).toHaveBeenCalledWith('VEH:9');
+  });
+
   it('reports the loaded entity to onChange, before any edit', async () => {
     mockFns.request.mockResolvedValueOnce(envelope(TRAM));
     const onChange = vi.fn();
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onChange }));
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1', onChange }));
+    await waitFor(() => expect(result.current).not.toBeNull());
 
     // A host header must be able to show the loaded name without waiting for a
-    // keystroke, so this fires on the load, not only on user edits. Via waitFor
-    // like its siblings: the callback comes from a passive effect, not from the
-    // same read as `loading`.
+    // keystroke, so this fires on the load, not only on user edits.
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(TRAM));
   });
 
@@ -452,8 +655,8 @@ describe('useEntityForm', () => {
     mockFns.request.mockResolvedValueOnce(envelope(TRAM));
     const onChange = vi.fn();
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onChange }));
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1', onChange }));
+    await waitFor(() => expect(result.current).not.toBeNull());
 
     const edited = { ...TRAM, name: { value: 'Tram Two' } };
     act(() => result.current.setValue(edited as any));
@@ -465,8 +668,8 @@ describe('useEntityForm', () => {
     mockFns.request.mockResolvedValueOnce(envelope(TRAM));
     const onDirtyChange = vi.fn();
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onDirtyChange }));
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1', onDirtyChange }));
+    await waitFor(() => expect(result.current).not.toBeNull());
     expect(result.current.dirty).toBe(false);
 
     act(() => result.current.setValue({ ...TRAM, name: { value: 'Edited' } } as any));
@@ -485,25 +688,27 @@ describe('useEntityForm', () => {
       .mockResolvedValueOnce(envelope(updated));
 
     const onDirtyChange = vi.fn();
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onDirtyChange }));
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1', onDirtyChange }));
+    await waitFor(() => expect(result.current).not.toBeNull());
 
     act(() => result.current.setValue(updated as any));
     await waitFor(() => expect(result.current.dirty).toBe(true));
 
-    await act(async () => result.current.handleSave());
-    await waitFor(() => expect(result.current.saving).toBe(false));
+    await save();
+    expect(result.current.saving).toBe(false);
 
     expect(result.current.dirty).toBe(false);
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    // No second load: the save's own refetch is the new baseline.
+    expect(mockFns.request).toHaveBeenCalledTimes(3);
   });
 
   it('reset discards edits back to the loaded entity', async () => {
     mockFns.request.mockResolvedValueOnce(envelope(TRAM));
     const onDirtyChange = vi.fn();
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1', onDirtyChange }));
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1', onDirtyChange }));
+    await waitFor(() => expect(result.current).not.toBeNull());
 
     act(() => result.current.setValue({ ...TRAM, name: { value: 'Edited' } } as any));
     await waitFor(() => expect(result.current.dirty).toBe(true));
@@ -525,12 +730,12 @@ describe('useEntityForm', () => {
       .mockResolvedValueOnce({ createOrUpdateVehicle: 'VEH:1' })
       .mockResolvedValueOnce(envelope(saved));
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1' }));
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1' }));
+    await waitFor(() => expect(result.current).not.toBeNull());
 
     act(() => result.current.setValue(saved as any));
-    await act(async () => result.current.handleSave());
-    await waitFor(() => expect(result.current.saving).toBe(false));
+    await save();
+    expect(result.current.saving).toBe(false);
 
     act(() => result.current.setValue({ ...saved, name: { value: 'Third' } } as any));
     act(() => result.current.reset());
@@ -549,12 +754,12 @@ describe('useEntityForm', () => {
         },
       });
 
-    const { result } = renderForm(mkProps({ netexId: 'VEH:1' }));
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    const { result } = await mount(mkProps({ netexId: 'VEH:1' }));
+    await waitFor(() => expect(result.current).not.toBeNull());
 
     act(() => result.current.setValue({ ...TRAM, name: { value: 'Edited' } } as any));
-    await act(async () => result.current.handleSave());
-    await waitFor(() => expect(result.current.errors).not.toEqual({}));
+    await save();
+    expect(result.current.errors).not.toEqual({});
 
     act(() => result.current.reset());
 
@@ -568,20 +773,19 @@ describe('useEntityForm', () => {
       .mockResolvedValueOnce(envelope(TRAM))
       .mockRejectedValueOnce(new Error('boom'));
 
-    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1' }));
-    await waitFor(() => expect(result.current.value).toEqual(TRAM));
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
+    await waitFor(() => expect(result.current?.value).toEqual(TRAM));
 
     // A *re*load — switching netexId, or an org switch — fails without clearing
     // the entity already on screen, so `__init` and a value do coexist.
-    rerender(mkProps({ netexId: 'VEH:2' }));
+    await swap(rerender, mkProps({ netexId: 'VEH:2' }));
     await waitFor(() => expect(result.current.load).toBe('error'));
     expect(result.current.value).toEqual(TRAM);
 
     act(() => result.current.reset());
 
-    // `load` stays 'error' and consumers render `errors.__init` for that phase:
-    // dropping the message with the edits would leave them rendering an empty
-    // error. A failed load is a fact about the record, not the edit session.
+    // `__init` is derived from the load, not from the edit session, so a discard
+    // cannot drop it: `load` stays 'error' and consumers keep a message to show.
     expect(result.current.load).toBe('error');
     expect(result.current.errors.__init).toBe('Failed to load');
   });
@@ -595,12 +799,13 @@ describe('useEntityForm', () => {
       .mockResolvedValueOnce(envelope(TRAM))
       .mockResolvedValueOnce({ vehicles: { content: [] } });
 
-    const { result, rerender } = renderForm(mkProps({ netexId: 'VEH:1', onChange }));
-    await waitFor(() => expect(result.current.value).toBeDefined());
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1', onChange }));
+    await waitFor(() => expect(result.current?.value).toBeDefined());
 
-    rerender(mkProps({ netexId: 'VEH:2', onChange }));
+    await swap(rerender, mkProps({ netexId: 'VEH:2', onChange }));
 
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(undefined));
+    expect(result.current.load).toBe('ok');
   });
 
 });

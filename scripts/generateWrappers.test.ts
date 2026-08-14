@@ -22,7 +22,7 @@ describe('renderWrapperSource', () => {
   it('has no dataOwnerRef: \'\' literal; variables receives it from the hook', () => {
     expect(src).not.toMatch(/dataOwnerRef: ''/);
     expect(src).toMatch(
-      /variables: \(netexId, dataOwnerRef\) => \(\{ filter: \{ netexIds: \[netexId\], dataOwnerRef \} \}\)/
+      /variables: \(netexId: string, dataOwnerRef: string\) => \(\{ filter: \{ netexIds: \[netexId\], dataOwnerRef \} \}\)/
     );
   });
 
@@ -46,7 +46,10 @@ describe('renderWrapperSource', () => {
     // Cancel is the hook's in-place discard, not a remount — the wrapper owns
     // no `key` of its own and cannot re-mount itself.
     expect(src).toMatch(/onCancel=\{reset\}/);
-    expect(src).toMatch(/const \{ value, setValue, reset, loading, saving, load, dirty, errors, handleSave \}/);
+    expect(src).toMatch(/const \{ value, setValue, reset, saving, load, dirty, errors, handleSave \}/);
+    // No `loading`: the record is read with `use()`, so a pending load has not
+    // committed at all — Suspense holds the fallback and the hook never returns.
+    expect(src).not.toMatch(/[,{] loading\b|disabled=\{loading/);
   });
 
   it('exposes the footer to the host for labels and styling', () => {
@@ -66,8 +69,11 @@ describe('renderWrapperSource', () => {
       /import \{ FormSkeleton, FormArrival \} from '\.\.\/components\/FormSkeleton';/
     );
     expect(src).not.toMatch(/<div>Loading\.\.\.<\/div>/);
+    // It is the Suspense fallback now, not an early return: the suspending half
+    // has to sit inside the boundary, which is why the wrapper splits in two.
+    expect(src).toMatch(/import \{ Suspense \} from 'react';/);
     expect(src).toMatch(
-      /<FormSkeleton \{\.\.\.skeletonProps\} fields=\{FIELDS\} layout=\{layout\} variant=\{variant\} \/>/
+      /<Suspense\s+fallback=\{\s+<FormSkeleton\s+\{\.\.\.skeletonProps\}\s+fields=\{FIELDS\}\s+layout=\{rest\.layout\}\s+variant=\{rest\.variant\}\s+\/>\s+\}\s+>\s+<VehicleFormRecord \{\.\.\.rest\} resource=\{resource\} \/>\s+<\/Suspense>/
     );
   });
 
@@ -80,9 +86,9 @@ describe('renderWrapperSource', () => {
     expect(src).toMatch(/<\/FormArrival>\s+\{\/\* Inert until/);
   });
 
-  it('gates not-found on the settled load phase, never on `loading`', () => {
-    // `loading` is false on the first commit (LOAD_START fires from a passive
-    // effect), so a not-found branch gated on it flashes on every mount.
+  it('gates not-found on the settled load phase, never on a loading flag', () => {
+    // Both remaining branches are settled states. A pending record suspends, so
+    // this component has not rendered — there is no first commit to flash on.
     expect(src).not.toMatch(/!loading && !value && netexId/);
     expect(src).toMatch(
       /if \(netexId && !value && load === 'ok'\) return <div>Not found: \{netexId\}<\/div>;/

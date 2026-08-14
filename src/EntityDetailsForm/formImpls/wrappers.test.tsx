@@ -14,7 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { ComponentType, ReactNode } from 'react';
+import type { ComponentType, ReactElement, ReactNode } from 'react';
 import { SobekProvider } from '../../context/SobekContext';
 import { humanize } from '../../shared/humanize';
 import type { FieldSpec } from '../types';
@@ -99,6 +99,19 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   </SobekProvider>
 );
 
+/**
+ * Render inside an **awaited** `act`.
+ *
+ * The form reads its record with `use()`, so the first render suspends, and a
+ * render that suspends parks its retry on the act queue — the synchronous `act`
+ * inside a bare `render` has already exited by then, leaving the tree on its
+ * fallback forever. Awaiting the scope that contains the suspending render is
+ * the supported pattern.
+ */
+const mount = async (ui: ReactElement): Promise<void> => {
+  await act(async () => { render(ui, { wrapper }); });
+};
+
 /** Resolve one manifest entry to the generated component + its field registry. */
 const bind = (entry: ManifestEntry) => {
   // Structural stand-in for the generated `<Entity>FormProps`, kept
@@ -133,7 +146,7 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
     it('renders a not-found state on a settled zero-row load (no blank form)', async () => {
       mockFns.request.mockResolvedValueOnce(rows([]));
 
-      render(<Form netexId={NETEX_ID} />, { wrapper });
+      await mount(<Form netexId={NETEX_ID} />);
 
       await waitFor(() =>
         expect(screen.getByText(`Not found: ${NETEX_ID}`)).toBeInTheDocument()
@@ -144,14 +157,16 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
     });
 
     it('never shows not-found on the first commit, before the load starts', () => {
-      // Regression: `loading` is false on the first commit (LOAD_START dispatches
-      // from a passive effect), so a not-found branch gated on it rendered
-      // "Not found" for one frame on every mount of an existing entity.
+      // Regression, from when a `loading` flag guarded this: it was false on the
+      // first commit (the load started from a passive effect), so a not-found
+      // branch gated on it rendered "Not found" for one frame on every mount of
+      // an existing entity. Now the record is read with `use()` and the first
+      // commit *is* the fallback, so this asserts a structural property.
       //
       // Deliberately not RTL's `render`: it wraps in `act()`, which flushes the
-      // passive effect before returning and hides the flash entirely. `flushSync`
-      // commits synchronously and leaves passive effects scheduled, so `container`
-      // holds exactly what the browser would paint first.
+      // passive effect before returning and would hide such a flash entirely.
+      // `flushSync` commits synchronously, so `container` holds exactly what the
+      // browser would paint first.
       mockFns.request.mockReturnValueOnce(new Promise(() => {}));
 
       const container = document.createElement('div');
@@ -177,7 +192,7 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
     it('surfaces a failed load instead of reporting it as not found', async () => {
       mockFns.request.mockRejectedValueOnce(new Error('boom'));
 
-      render(<Form netexId={NETEX_ID} />, { wrapper });
+      await mount(<Form netexId={NETEX_ID} />);
 
       await waitFor(() => expect(screen.getByText('Failed to load')).toBeInTheDocument());
       expect(screen.queryByText(`Not found: ${NETEX_ID}`)).toBeNull();
@@ -217,7 +232,7 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
         .mockResolvedValueOnce({ [entry.mutationName]: NETEX_ID })
         .mockResolvedValueOnce(rows([row]));
 
-      render(<Form netexId={NETEX_ID} />, { wrapper });
+      await mount(<Form netexId={NETEX_ID} />);
       await waitFor(() => expect(screen.getByLabelText(humanize('netexId'))).toBeEnabled());
 
       // Edit a patch-only field where one is drivable: proves the field is
@@ -241,7 +256,7 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
         const key = editable[0];
         mockFns.request.mockResolvedValueOnce(rows([{ netexId: NETEX_ID, ...seed([key]) }]));
 
-        render(<Form netexId={NETEX_ID} />, { wrapper });
+        await mount(<Form netexId={NETEX_ID} />);
         await waitFor(() => expect(screen.getByLabelText(humanize(key))).toBeEnabled());
 
         // Nothing to save and nothing to discard on a freshly loaded record.
@@ -260,7 +275,7 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
       const kind = drivable(key).kind;
       mockFns.request.mockResolvedValueOnce(rows([{ netexId: NETEX_ID, ...seed([key]) }]));
 
-      render(<Form netexId={NETEX_ID} />, { wrapper });
+      await mount(<Form netexId={NETEX_ID} />);
       await waitFor(() => expect(screen.getByLabelText(humanize(key))).toBeEnabled());
 
       editControl(kind, humanize(key));
@@ -282,7 +297,7 @@ describe.each(manifest.map(e => [e.entity, e] as const))(
       mockFns.request.mockResolvedValueOnce(rows([row]));
       const onChange = vi.fn();
 
-      render(<Form netexId={NETEX_ID} onChange={onChange} />, { wrapper });
+      await mount(<Form netexId={NETEX_ID} onChange={onChange} />);
 
       // Pins the `...rest` passthrough into the hook. Note this passes even if
       // the generated props interface omits the callback — `rest` is untyped at
