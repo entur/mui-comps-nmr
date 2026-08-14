@@ -45,6 +45,8 @@ installStoriesMock();
 
 const LIST_WIDTH = 260;
 const NEW_KEY = "new";
+/** Slow enough that the skeleton and the arrival fade are actually watchable. */
+const DEFAULT_READ_DELAY_MS = 600;
 
 /**
  * How a multi-section form presents its sections (mirrors DumbAppMock):
@@ -148,7 +150,10 @@ interface GqlHostPageProps {
   tabStyle?: TabStyle;
   /** Mock read latency. The forms render their own load states, so this is the
    *  only way to see the shaped skeleton and the arrival fade — at `0` the
-   *  response resolves in the same tick and neither paints. */
+   *  response resolves in the same tick and neither paints.
+   *
+   *  Consumed by the meta's `beforeEach`, not by this component: it configures
+   *  the mock endpoint, which is story infrastructure rather than page state. */
   readDelayMs?: number;
 }
 
@@ -158,11 +163,8 @@ interface GqlHostPageProps {
  * data-aware form; the pane owns the four host concerns — stable auth headers,
  * new-vs-edit via `netexId`, discard via remount `key`, and reacting to saves.
  */
-const GqlHostPage = ({ tabStyle = "one-line", readDelayMs }: GqlHostPageProps) => {
+const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
   const { variant, slotProps } = useMemo(() => deriveTabs(tabStyle), [tabStyle]);
-  // Applied during render, not in an effect: the first form mounts and fires its
-  // load in this same commit, so an effect would set it one request too late.
-  if (readDelayMs !== undefined) setMockLatency({ read: readDelayMs });
   const [selection, setSelection] = useState<Selection | null>({
     entity: "vehicle",
     netexId: "VEH:Vehicle:701",
@@ -332,7 +334,16 @@ const meta: Meta<typeof GqlHostPage> = {
   title: "compositions/GqlHostPages",
   component: GqlHostPage,
   parameters: { layout: "fullscreen" },
-  args: { tabStyle: "one-line", readDelayMs: 600 },
+  // Configure the mock *before* the story renders. Not in the component body
+  // (mutating module state during render is impure — StrictMode runs it twice)
+  // and not in a `useEffect` either: the forms fire their load from a passive
+  // effect, and on mount React runs child effects before parent ones, so a
+  // parent effect would land one request too late and the first load would
+  // always be instant — exactly the case this control exists to slow down.
+  beforeEach: ({ args }) => {
+    setMockLatency({ read: args.readDelayMs ?? DEFAULT_READ_DELAY_MS });
+  },
+  args: { tabStyle: "one-line", readDelayMs: DEFAULT_READ_DELAY_MS },
   argTypes: {
     tabStyle: {
       control: "inline-radio",
