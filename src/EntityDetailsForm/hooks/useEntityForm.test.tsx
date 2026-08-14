@@ -593,6 +593,36 @@ describe('useEntityForm', () => {
     expect(result.current.dirty).toBe(true);
   });
 
+  it('does not resurrect a post-save baseline when the record is revisited', async () => {
+    // `saved` outliving its record would win over the refetch on the way back:
+    // the form would display — and diff against — what this session saved
+    // rather than what the server now holds.
+    const savedTram = { netexId: 'VEH:1', name: { value: 'Tram Saved' } };
+    const elsewhere = { netexId: 'VEH:1', name: { value: 'Tram Changed Elsewhere' } };
+
+    let tramLoads = 0;
+    mockFns.request.mockImplementation((doc: unknown, vars: any) => {
+      if (doc === mutationDoc) return Promise.resolve({ createOrUpdateVehicle: 'VEH:1' });
+      if (vars.filter.netexIds[0] === 'VEH:2') return Promise.resolve(envelope(BUS));
+      tramLoads += 1;
+      return Promise.resolve(envelope(tramLoads === 1 ? TRAM : tramLoads === 2 ? savedTram : elsewhere));
+    });
+
+    const { result, rerender } = await mount(mkProps({ netexId: 'VEH:1' }));
+
+    act(() => result.current.setValue({ netexId: 'VEH:1', name: { value: 'Edited' } } as any));
+    await save();
+    expect(result.current.value).toEqual(savedTram);
+
+    await swap(rerender, mkProps({ netexId: 'VEH:2' }));
+    await waitFor(() => expect(result.current.value).toEqual(BUS));
+
+    await swap(rerender, mkProps({ netexId: 'VEH:1' }));
+
+    await waitFor(() => expect(result.current.value).toEqual(elsewhere));
+    expect(result.current.dirty).toBe(false);
+  });
+
   it('surfaces a fallback error when a save fails with no GraphQL errors', async () => {
     mockFns.request
       .mockResolvedValueOnce(envelope(TRAM))

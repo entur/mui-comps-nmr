@@ -98,7 +98,10 @@ save is ignored). The tag alone isn't the guard, though: the save's whole
 completion — `held`, the draft reset, the error reset — is gated on a live-key
 ref, because the one switch that *doesn't* suspend (edit → create) commits
 while the Action is still out. Only `onSaved` fires regardless: the mutation
-committed server-side, wherever the form went. `value = draft ?? baseline`, so
+committed server-side, wherever the form went. That baseline is also dropped on
+every key change (create mode included), or it would outrank the refetch when a
+record is revisited and show what this session saved instead of what the server
+now holds. `value = draft ?? baseline`, so
 an untouched form **is** its baseline and a load or a save leaves it clean with
 nothing to re-baseline. The draft is discarded when the record changes, so a new
 record can't be masked by the previous one's edits. The comparison (`src/EntityDetailsForm/utils/dirty.ts`) treats `undefined | null | false |

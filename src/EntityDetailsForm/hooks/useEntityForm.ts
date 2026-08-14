@@ -221,6 +221,12 @@ export function useEntityForm<E>(props: UseEntityFormProps<E>) {
   const [prevKey, setPrevKey] = useState(key);
   if (key !== prevKey) {
     setPrevKey(key);
+    // Dropped on *every* key change, create mode included: `saved` is the
+    // server's last word on one record, and it outranks the load in `baseline`.
+    // Kept across a switch it would win over the refetch on the way back — the
+    // form would show, and diff against, what this session saved rather than
+    // what the server now holds.
+    setSaved(null);
     if (key !== CREATE_KEY) {
       setDraft(undefined);
       setSaveErrors(NO_ERRORS);
