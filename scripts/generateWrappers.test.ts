@@ -59,6 +59,27 @@ describe('renderWrapperSource', () => {
     expect(src).toMatch(/<EditFooter\s+\{\.\.\.footerProps\}\s+dirty=\{dirty\}/);
   });
 
+  it('stands a shaped skeleton in for the record while it loads', () => {
+    // Shape is derived, not hand-tuned: the same FIELDS + layout that draw the
+    // form draw the placeholders, so a new entity needs no row-count literal.
+    expect(src).toMatch(
+      /import \{ FormSkeleton, FormArrival \} from '\.\.\/components\/FormSkeleton';/
+    );
+    expect(src).not.toMatch(/<div>Loading\.\.\.<\/div>/);
+    expect(src).toMatch(
+      /<FormSkeleton \{\.\.\.skeletonProps\} fields=\{FIELDS\} layout=\{layout\} variant=\{variant\} \/>/
+    );
+  });
+
+  it('exposes the skeleton to the host, and fades the arriving form in', () => {
+    expect(src).toMatch(/skeletonProps\?: FormSkeletonHostProps;/);
+    // Only the presentation is wrapped: an animated `transform` on an ancestor
+    // becomes a containing block, which would break the footer's `position:
+    // sticky` for the length of the fade.
+    expect(src).toMatch(/<FormArrival>\s+<VehicleFormPresentation/);
+    expect(src).toMatch(/<\/FormArrival>\s+\{\/\* Inert until/);
+  });
+
   it('gates not-found on the settled load phase, never on `loading`', () => {
     // `loading` is false on the first commit (LOAD_START fires from a passive
     // effect), so a not-found branch gated on it flashes on every mount.
