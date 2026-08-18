@@ -47,6 +47,9 @@ const LIST_WIDTH = 260;
 const NEW_KEY = "new";
 /** Slow enough that the skeleton and the arrival fade are actually watchable. */
 const DEFAULT_READ_DELAY_MS = 600;
+/** Controls-pane groupings: page-level knobs vs. the per-kind MUI overrides. */
+const CAT_PAGE = "page",
+  CAT_SLOTS = "slotProps (per kind)";
 
 /**
  * How a multi-section form presents its sections (mirrors DumbAppMock):
@@ -55,6 +58,20 @@ const DEFAULT_READ_DELAY_MS = 600;
  * - `pills`    → wrapping filled-pill tabs (hathor's VehicleTypeForm style).
  */
 type TabStyle = "none" | "one-line" | "pills";
+
+/**
+ * Which `layout` the pane hands the active form:
+ * - `curated`     → the per-entity fixture from `initLayouts` (sections, column
+ *                   entries, and the `options` closures that turn `reference`
+ *                   fields into Autocompletes).
+ * - `zero-config` → no layout at all: every field renders flat, in registry
+ *                   order, incl. the `serverManaged` meta timestamps, and
+ *                   `reference` fields degrade to free-text id inputs.
+ *
+ * A preset rather than an object control on purpose — a layout carries function
+ * values (`options`), which a serialized Controls-pane object would drop.
+ */
+type LayoutPreset = "curated" | "zero-config";
 
 /** `slotProps` reproducing hathor's wrapping pill tabs: `standard` variant (so
  *  the row can wrap) + a flex-wrap container + filled-pill tab styling. */
@@ -83,11 +100,18 @@ const deriveTabs = (
 ): { variant: LayoutVariant; slotProps: ControlSlotProps } => {
   if (tabStyle === "none") return { variant: "stacked", slotProps: {} };
   if (tabStyle === "pills")
-    return { variant: "tabs", slotProps: { tabs: { variant: "standard", sx: PILL_TABS_SX } } };
+    return {
+      variant: "tabs",
+      slotProps: { tabs: { variant: "standard", sx: PILL_TABS_SX } },
+    };
   return {
     variant: "tabs",
     slotProps: {
-      tabs: { variant: "scrollable", scrollButtons: "auto", allowScrollButtonsMobile: true },
+      tabs: {
+        variant: "scrollable",
+        scrollButtons: "auto",
+        allowScrollButtonsMobile: true,
+      },
     },
   };
 };
@@ -148,6 +172,8 @@ interface GqlHostPageProps {
   /** How multi-section forms (VehicleType) present sections. Single-section
    *  Vehicle renders flat regardless. */
   tabStyle?: TabStyle;
+  /** Which `layout` reaches the form — see {@link LayoutPreset}. */
+  formLayout?: LayoutPreset;
   /** Mock read latency. The forms render their own load states, so this is the
    *  only way to see the shaped skeleton and the arrival fade — at `0` the
    *  response resolves in the same tick and neither paints.
@@ -155,7 +181,43 @@ interface GqlHostPageProps {
    *  Consumed by the meta's `beforeEach`, not by this component: it configures
    *  the mock endpoint, which is story infrastructure rather than page state. */
   readDelayMs?: number;
+
+  /* ── `ControlSlotProps`, one control per kind ──────────────────────────────
+   * Flattened out of the nested object so the Controls pane gets a row per
+   * kind instead of one opaque blob. Each is spread back onto the form's
+   * `slotProps` under its own key; `undefined` (an untouched control) is
+   * dropped rather than sent, so it can't shadow a library default. */
+
+  /** `slotProps.text` — TextField `slotProps` for every `text` field. */
+  slotText?: ControlSlotProps["text"];
+  /** `slotProps.number` — TextField `slotProps` for every `number` field. */
+  slotNumber?: ControlSlotProps["number"];
+  /** `slotProps.name` — TextField `slotProps` for every `name` (value/lang) field. */
+  slotName?: ControlSlotProps["name"];
+  /** `slotProps.enum` — TextField `slotProps` for every single-select `enum` field. */
+  slotEnum?: ControlSlotProps["enum"];
+  /** `slotProps.date` — TextField `slotProps` for the native `date` inputs. */
+  slotDate?: ControlSlotProps["date"];
+  /** `slotProps.datetime` — TextField `slotProps` for the native `datetime` inputs. */
+  slotDatetime?: ControlSlotProps["datetime"];
+  /** `slotProps.enumMulti` — Autocomplete `slotProps` for multi-select fields. */
+  slotEnumMulti?: ControlSlotProps["enumMulti"];
+  /** `slotProps.switch` — props spread onto every `<Switch>`. */
+  slotSwitch?: ControlSlotProps["switch"];
+  /** `slotProps.grid` — `{ dataGrid }` passthrough to the read-only DataGrid. */
+  slotGrid?: ControlSlotProps["grid"];
+  /** `slotProps.tabs` — merged *over* whatever {@link deriveTabs} produced for
+   *  the current `tabStyle`, so a partial override tweaks the preset rather
+   *  than replacing it. */
+  slotTabs?: ControlSlotProps["tabs"];
 }
+
+/** Drop `undefined` members, so an untouched Controls row stays absent from
+ *  `slotProps` instead of overwriting a derived or library default with it. */
+const defined = <T extends object>(o: T): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(o).filter(([, v]) => v !== undefined),
+  ) as Partial<T>;
 
 /**
  * Single host screen with two stacked record lists (Vehicle types + Vehicles)
@@ -163,8 +225,56 @@ interface GqlHostPageProps {
  * data-aware form; the pane owns the four host concerns — stable auth headers,
  * new-vs-edit via `netexId`, discard via remount `key`, and reacting to saves.
  */
-const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
-  const { variant, slotProps } = useMemo(() => deriveTabs(tabStyle), [tabStyle]);
+const GqlHostPage = ({
+  tabStyle = "one-line",
+  formLayout = "curated",
+  slotText,
+  slotNumber,
+  slotName,
+  slotEnum,
+  slotDate,
+  slotDatetime,
+  slotEnumMulti,
+  slotSwitch,
+  slotGrid,
+  slotTabs,
+}: GqlHostPageProps) => {
+  const { variant, slotProps } = useMemo(() => {
+    const { variant, slotProps: base } = deriveTabs(tabStyle);
+    const over = defined({
+      text: slotText,
+      number: slotNumber,
+      name: slotName,
+      enum: slotEnum,
+      date: slotDate,
+      datetime: slotDatetime,
+      enumMulti: slotEnumMulti,
+      switch: slotSwitch,
+      grid: slotGrid,
+    });
+    return {
+      variant,
+      slotProps: {
+        ...base,
+        ...over,
+        // Merge, don't replace: the preset owns `variant`/`scrollButtons`, the
+        // control usually only wants to add an `sx`.
+        ...(slotTabs ? { tabs: { ...base.tabs, ...slotTabs } } : {}),
+      } satisfies ControlSlotProps,
+    };
+  }, [
+    tabStyle,
+    slotText,
+    slotNumber,
+    slotName,
+    slotEnum,
+    slotDate,
+    slotDatetime,
+    slotEnumMulti,
+    slotSwitch,
+    slotGrid,
+    slotTabs,
+  ]);
   const [selection, setSelection] = useState<Selection | null>({
     entity: "vehicle",
     netexId: "VEH:Vehicle:701",
@@ -276,7 +386,9 @@ const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
                 // `pointer-events: none` (ButtonBase), so a `title` on the
                 // button itself would never surface — exactly when it is needed.
                 <span
-                  title={dirty ? "Save or cancel your changes first" : undefined}
+                  title={
+                    dirty ? "Save or cancel your changes first" : undefined
+                  }
                 >
                   <Button
                     color="inherit"
@@ -302,7 +414,8 @@ const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
                 mode={mode}
                 variant={variant}
                 slotProps={slotProps}
-                layout={active.layout}
+                // `zero-config` omits it entirely — flat render, every field.
+                layout={formLayout === "curated" ? active.layout : undefined}
                 onDirtyChange={setDirty}
                 onSaved={(id) => {
                   setSelection({ entity: selection.entity, netexId: id });
@@ -330,6 +443,61 @@ const GqlHostPage = ({ tabStyle = "one-line" }: GqlHostPageProps) => {
   );
 };
 
+/**
+ * `[prop, displayed name, hint]` for every `ControlSlotProps` key. Kept as one
+ * table so a new kind is one line here, not a hand-written `argTypes` block —
+ * the hint doubles as the shape reminder, since an object control opens empty.
+ */
+const SLOT_ROWS: readonly [keyof GqlHostPageProps, string, string][] = [
+  [
+    "slotText",
+    "text",
+    "TextField slotProps, e.g. `{ input: { sx: { bgcolor: '#fffbe6' } } }`",
+  ],
+  [
+    "slotNumber",
+    "number",
+    "TextField slotProps, e.g. `{ htmlInput: { step: 10 } }`",
+  ],
+  ["slotName", "name", "TextField slotProps for the name (value/lang) fields"],
+  ["slotEnum", "enum", "TextField slotProps for single-select enums"],
+  ["slotDate", "date", "TextField slotProps for the native `date` inputs"],
+  [
+    "slotDatetime",
+    "datetime",
+    "TextField slotProps for the native `datetime-local` inputs",
+  ],
+  [
+    "slotEnumMulti",
+    "enumMulti",
+    "Autocomplete slotProps, e.g. `{ chip: { size: 'small' } }`",
+  ],
+  [
+    "slotSwitch",
+    "switch",
+    "SwitchProps, e.g. `{ size: 'small', color: 'secondary' }` (checked/onChange always win)",
+  ],
+  [
+    "slotGrid",
+    "grid",
+    "`{ dataGrid: { density: 'compact', hideFooter: true } }`",
+  ],
+  [
+    "slotTabs",
+    "tabs",
+    "Partial<TabsProps>, merged over the tabStyle preset, e.g. `{ centered: true }`",
+  ],
+];
+
+/** Expand {@link SLOT_ROWS} into one object control per kind, all grouped under
+ *  a single Controls-pane category. */
+const slotArgTypes = Object.fromEntries(
+  SLOT_ROWS.map(([prop, name, description]) => [
+    prop,
+    { name, control: "object", table: { category: CAT_SLOTS }, description },
+  ]),
+);
+
 const meta: Meta<typeof GqlHostPage> = {
   title: "compositions/GqlHostPages",
   component: GqlHostPage,
@@ -343,19 +511,33 @@ const meta: Meta<typeof GqlHostPage> = {
   beforeEach: ({ args }) => {
     setMockLatency({ read: args.readDelayMs ?? DEFAULT_READ_DELAY_MS });
   },
-  args: { tabStyle: "one-line", readDelayMs: DEFAULT_READ_DELAY_MS },
+  args: {
+    tabStyle: "one-line",
+    formLayout: "curated",
+    readDelayMs: DEFAULT_READ_DELAY_MS,
+  },
   argTypes: {
     tabStyle: {
       control: "inline-radio",
       options: ["none", "one-line", "pills"],
+      table: { category: CAT_PAGE },
       description:
         "How multi-section forms (VehicleType) present sections: none = stacked (no tabs), one-line = scrollable tab row, pills = wrapping pill tabs. Vehicle is single-section, so unaffected.",
     },
+    formLayout: {
+      control: "inline-radio",
+      options: ["curated", "zero-config"],
+      table: { category: CAT_PAGE },
+      description:
+        "The form's `layout`: curated = the per-entity fixture from initLayouts (sections + reference `options`); zero-config = layout omitted, so every field renders flat incl. serverManaged timestamps and `reference` degrades to a free-text id. Not an object control — a layout holds `options` closures a serialized control would drop.",
+    },
     readDelayMs: {
       control: { type: "range", min: 0, max: 3000, step: 100 },
+      table: { category: CAT_PAGE },
       description:
         "Mock read latency. Raise it to watch the shaped skeleton and the arrival fade; 0 resolves in the same tick, so neither is visible. Select a record in either list to re-trigger a load.",
     },
+    ...slotArgTypes,
   },
 };
 export default meta;
