@@ -210,3 +210,54 @@ describe('createAbstractEntityDetailsForm', () => {
     expect(screen.getByText(/Already exists/)).toBeInTheDocument();
   });
 });
+
+/**
+ * The central guarantee of two-column mode: moving the label out of the MUI
+ * control must not cost the control its accessible name. Asserted with the
+ * *same* queries in both placements — if `start` broke the binding, the shared
+ * cases below would fail only for `start`.
+ */
+describe.each(['float', 'start'] as const)('labelPlacement=%s', placement => {
+  it('keeps every control reachable by its label', () => {
+    render(<Host labelPlacement={placement} />);
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Tram');
+    expect((screen.getByLabelText('Length') as HTMLInputElement).value).toBe('5');
+  });
+
+  it('round-trips an edit', () => {
+    render(<Host labelPlacement={placement} />);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Bus' } });
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Bus');
+  });
+
+  it('still locks serverManaged and locked fields', () => {
+    render(<Host labelPlacement={placement} />);
+    expect(screen.getByLabelText('Version')).toBeDisabled();
+    expect(screen.getByLabelText('Data owner ref')).toBeDisabled();
+  });
+});
+
+describe('labelPlacement=start', () => {
+  it('gives each field exactly one label element', () => {
+    const { container } = render(<Host labelPlacement="start" />);
+    // Two would mean the control kept drawing its own beside the row's.
+    expect(container.querySelectorAll('label')).toHaveLength(Object.keys(fields).length);
+  });
+
+  it('draws no MUI floating label — the row owns the label instead', () => {
+    const { container } = render(<Host labelPlacement="start" />);
+    expect(container.querySelector('.MuiInputLabel-root')).toBeNull();
+  });
+
+  it('leaves the float markup alone by default', () => {
+    const { container } = render(<Host />);
+    // Every field in this fixture is TextField-backed, so the default path must
+    // still produce one MUI floating label each.
+    // NB: do NOT assert on `[class*="MuiFormLabel-root"][for]` here — the
+    // control now always carries `controlId`, so MUI's own InputLabel gains a
+    // `for` attribute in float mode too and such an assertion would fail.
+    expect(container.querySelectorAll('.MuiInputLabel-root')).toHaveLength(
+      Object.keys(fields).length
+    );
+  });
+});
