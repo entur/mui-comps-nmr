@@ -46,6 +46,12 @@ export interface ControlProps {
   slotProps?: ControlSlotProps;
   /** Server validation error for this field (if any). */
   error?: string;
+  /** DOM id for the control's own input, so a two-column row's `<label htmlFor>`
+   *  binds to it. Unset in `'float'` mode, where MUI owns the label. */
+  controlId?: string;
+  /** The row draws the label, so the control must not draw one of its own —
+   *  otherwise it appears twice. */
+  labelless?: boolean;
 }
 
 /**
@@ -68,12 +74,15 @@ export function renderControl({
   options,
   slotProps,
   error,
+  controlId,
+  labelless,
 }: ControlProps): ReactNode {
   // Shared TextField props. `slotProps` is set per-kind below (each TextField
   // kind merges its own override over `SHRINK_LABEL`); the bare default keeps
   // the label shrunk when no override is supplied.
   const common = {
-    label,
+    label: labelless ? undefined : label,
+    id: controlId,
     disabled,
     size: 'small' as const,
     fullWidth: true,
@@ -141,22 +150,22 @@ export function renderControl({
         />
       );
 
-    case 'switch':
-      return (
-        <FormControlLabel
-          control={
-            // Consumer Switch props spread first so the controlled
-            // `checked`/`disabled`/`onChange` below always win.
-            <Switch
-              {...slotProps?.switch}
-              checked={!!value}
-              disabled={disabled}
-              onChange={e => onChange(e.target.checked)}
-            />
-          }
-          label={label}
+    case 'switch': {
+      // Consumer Switch props spread first so the controlled
+      // `checked`/`disabled`/`onChange` below always win.
+      const toggle = (
+        <Switch
+          {...slotProps?.switch}
+          id={controlId}
+          checked={!!value}
+          disabled={disabled}
+          onChange={e => onChange(e.target.checked)}
         />
       );
+      // Bare in labelless mode: FormControlLabel would put a second copy of the
+      // label to the right of the toggle, beside the row's own.
+      return labelless ? toggle : <FormControlLabel control={toggle} label={label} />;
+    }
 
     case 'enum':
       return (
@@ -183,6 +192,7 @@ export function renderControl({
         <Autocomplete
           multiple
           size="small"
+          id={controlId}
           disabled={disabled}
           options={[...(spec.options ?? [])]}
           value={((value as string[] | null | undefined) ?? []).filter(Boolean)}
@@ -191,7 +201,7 @@ export function renderControl({
           renderInput={params => (
             <TextField
               {...params}
-              label={label}
+              label={labelless ? undefined : label}
               slotProps={SHRINK_LABEL}
               error={!!error}
               helperText={error ?? ''}
@@ -214,6 +224,7 @@ export function renderControl({
       return (
         <Autocomplete
           size="small"
+          id={controlId}
           disabled={disabled}
           options={opts}
           getOptionLabel={o => o.label}
@@ -223,7 +234,7 @@ export function renderControl({
           renderInput={params => (
             <TextField
               {...params}
-              label={label}
+              label={labelless ? undefined : label}
               slotProps={SHRINK_LABEL}
               error={!!error}
               helperText={error ?? ''}
