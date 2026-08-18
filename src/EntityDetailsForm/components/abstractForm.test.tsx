@@ -9,6 +9,7 @@ interface V {
   length?: number | null;
   version?: number | null;
   dataOwnerRef?: string | null;
+  vehicles?: { netexId?: string | null; name?: string | null }[] | null;
 }
 
 const fields: Record<string, FieldSpec> = {
@@ -16,7 +17,13 @@ const fields: Record<string, FieldSpec> = {
   length: { kind: 'number', path: ['length'] },
   version: { kind: 'number', path: ['version'], serverManaged: true },
   dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'], locked: true },
+  vehicles: { kind: 'grid', path: ['vehicles'], serverManaged: true },
 };
+
+// `grid` is the one kind that isn't a single labelable control (see
+// `FieldRow`'s `labelable`) — several assertions below need "how many fields
+// actually get a real `<label>`", which is this count, not `fields`' size.
+const labelableFieldCount = Object.values(fields).filter(f => f.kind !== 'grid').length;
 
 const Form = createAbstractEntityDetailsForm<V>(fields);
 
@@ -26,6 +33,7 @@ const Host = (props: Partial<EntityDetailsFormProps<V>>) => {
     length: 5,
     version: 1,
     dataOwnerRef: 'NOG:Authority:test',
+    vehicles: [{ netexId: 'NSB:Vehicle:1', name: 'Wagon 1' }],
   });
   return <Form value={v} onChange={setV} mode="edit" {...props} />;
 };
@@ -240,8 +248,12 @@ describe.each(['float', 'start'] as const)('labelPlacement=%s', placement => {
 describe('labelPlacement=start', () => {
   it('gives each field exactly one label element', () => {
     const { container } = render(<Host labelPlacement="start" />);
-    // Two would mean the control kept drawing its own beside the row's.
-    expect(container.querySelectorAll('label')).toHaveLength(Object.keys(fields).length);
+    // Two would mean the control kept drawing its own beside the row's. The
+    // `grid` field is excluded from the count: it gets a visible label too,
+    // but not a `<label>` element (see `labelableFieldCount` above and the
+    // dedicated grid case below) — ObjectGrid exposes no id for a real
+    // `<label htmlFor>` to bind to, so a `<label>` there would dangle.
+    expect(container.querySelectorAll('label')).toHaveLength(labelableFieldCount);
   });
 
   it('draws no MUI floating label — the row owns the label instead', () => {
@@ -251,13 +263,52 @@ describe('labelPlacement=start', () => {
 
   it('leaves the float markup alone by default', () => {
     const { container } = render(<Host />);
-    // Every field in this fixture is TextField-backed, so the default path must
-    // still produce one MUI floating label each.
+    // Every non-grid field in this fixture is TextField-backed, so the
+    // default path must still produce one MUI floating label each. `grid`
+    // never renders a `.MuiInputLabel-root` (it's not a TextField), in either
+    // placement, so it's excluded here too.
     // NB: do NOT assert on `[class*="MuiFormLabel-root"][for]` here — the
     // control now always carries `controlId`, so MUI's own InputLabel gains a
     // `for` attribute in float mode too and such an assertion would fail.
-    expect(container.querySelectorAll('.MuiInputLabel-root')).toHaveLength(
-      Object.keys(fields).length
-    );
+    expect(container.querySelectorAll('.MuiInputLabel-root')).toHaveLength(labelableFieldCount);
+  });
+
+  it('gives the grid row a visible, non-<label> caption with no dangling htmlFor, and the grid keeps its accessible name', async () => {
+    const { container } = render(<Host labelPlacement="start" />);
+
+    // No real `<label>` exists for the grid: its caption renders as a plain
+    // span (see FieldRow's `labelable`), so it never shows up in this query.
+    const caption = screen.getByText('Vehicles');
+    expect(caption.tagName).toBe('SPAN');
+    expect(caption.closest('label')).toBeNull();
+
+    // Belt-and-braces: every `<label>` that *does* exist in the document
+    // still resolves its `for` to a real element — none dangles.
+    for (const label of Array.from(container.querySelectorAll('label'))) {
+      const forId = label.getAttribute('for');
+      if (forId) expect(document.getElementById(forId)).not.toBeNull();
+    }
+
+    // The grid's own name comes from `ObjectGrid`'s unconditional aria-label,
+    // independent of FieldRow — this is what keeps the grid accessible even
+    // though its row draws no `<label htmlFor>` for it.
+    const grid = await screen.findByRole('grid');
+    expect(grid).toHaveAttribute('aria-label', 'Vehicles');
+  });
+});
+
+describe('grid field, labelPlacement=float', () => {
+  it('is unaffected by the labelable fix — still draws its own caption, never a <label>', () => {
+    render(<Host />); // default placement: 'float'
+    // `FieldRow` draws no label of its own in `'float'` mode regardless of
+    // `labelable` (the early return in `FieldRow` short-circuits before that
+    // prop is even read), so the grid keeps drawing its own caption exactly
+    // as it did before this fix — this pins the default path stays untouched.
+    // (Other fields' own MUI floating labels *are* real `<label for>`
+    // elements in this mode, so the assertion is scoped to the grid's
+    // caption specifically, not "no label in the document".)
+    const caption = screen.getByText('Vehicles');
+    expect(caption.tagName).not.toBe('LABEL');
+    expect(caption.closest('label')).toBeNull();
   });
 });

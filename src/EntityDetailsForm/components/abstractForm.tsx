@@ -81,6 +81,11 @@ export function createAbstractEntityDetailsForm<E>(
           placement={labelPlacement}
           disabled={disabled}
           error={!!error}
+          // A grid renders a table, not a single control — ObjectGrid takes no
+          // `id` to point a `<label htmlFor>` at, so a real label there would
+          // dangle. FieldRow keeps the label visible in that case, just not as
+          // a `<label>` element (see FieldRow's own doc on `labelable`).
+          labelable={spec.kind !== 'grid'}
         >
           {body}
         </FieldRow>

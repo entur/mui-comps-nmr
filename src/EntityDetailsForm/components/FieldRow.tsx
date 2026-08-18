@@ -46,7 +46,8 @@ export const ROW_GRID_SX: SxProps<Theme> = {
 };
 
 export interface FieldRowProps {
-  /** DOM id of the control this row labels — the `htmlFor` target. */
+  /** DOM id of the control this row labels — the `htmlFor` target. Ignored when
+   *  {@link FieldRowProps.labelable} is `false`. */
   id: string;
   /** Resolved label (layout override, or the humanized key). */
   label: string;
@@ -55,6 +56,14 @@ export interface FieldRowProps {
   disabled?: boolean;
   /** Tints the label alongside a control showing a server validation error. */
   error?: boolean;
+  /** Whether `id` names a single labelable form control. Default `true`. A
+   *  `grid` field renders a data table, not a control — a `<label htmlFor>`
+   *  pointing at it (or at nothing, since `ObjectGrid` takes no `id`) would be
+   *  invalid markup, so those rows pass `false` here to keep the visible label
+   *  (still placed in the left column, still greyed/tinted the same way) while
+   *  rendering it as a non-`<label>` element. The grid's accessible name comes
+   *  from `ObjectGrid`'s own unconditional `aria-label`, not from this label. */
+  labelable?: boolean;
   children: ReactNode;
 }
 
@@ -65,11 +74,25 @@ export interface FieldRowProps {
  * @returns in `'float'` a spacing Box; in `'start'` a label + the control, as
  *          sibling grid items
  */
-export function FieldRow({ id, label, placement, disabled, error, children }: FieldRowProps) {
+export function FieldRow({
+  id,
+  label,
+  placement,
+  disabled,
+  error,
+  labelable = true,
+  children,
+}: FieldRowProps) {
   if (placement === 'float') return <Box sx={{ mb: ROW_GAP }}>{children}</Box>;
   return (
     <>
-      <FormLabel htmlFor={id} disabled={disabled} error={error} sx={{ pt: LABEL_PT }}>
+      <FormLabel
+        component={labelable ? 'label' : 'span'}
+        htmlFor={labelable ? id : undefined}
+        disabled={disabled}
+        error={error}
+        sx={{ pt: LABEL_PT }}
+      >
         {label}
       </FormLabel>
       {children}

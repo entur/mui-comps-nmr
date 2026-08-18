@@ -45,6 +45,31 @@ describe('FieldRow', () => {
     expect(label?.nextElementSibling?.tagName).toBe('INPUT');
   });
 
+  it('draws the label as a non-<label> element with no htmlFor when labelable is false', () => {
+    // `grid` fields render a data table, not a single control — there is no id
+    // to point a `<label htmlFor>` at, so `labelable={false}` (set by
+    // `abstractForm` for `kind: 'grid'`) keeps the label visible without
+    // emitting a `<label>` that would dangle.
+    const { container } = render(
+      <FieldRow id="f1" label="Fleet" placement="start" labelable={false}>
+        <div role="grid" aria-label="Fleet" />
+      </FieldRow>
+    );
+
+    expect(container.querySelector('label')).toBeNull();
+    expect(screen.getByText('Fleet').tagName).toBe('SPAN');
+  });
+
+  it('defaults labelable to true, so omitting it reproduces the real-label behaviour', () => {
+    render(
+      <FieldRow id="f1" label="Registration number" placement="start">
+        <input id="f1" />
+      </FieldRow>
+    );
+
+    expect(screen.getByLabelText('Registration number')).toBe(screen.getByRole('textbox'));
+  });
+
   it('scopes the collapse to the form’s own width, not the viewport', () => {
     // A narrow drawer on a wide monitor must collapse too, so the query has to
     // be a @container rule and the container-type must sit on a *different*
