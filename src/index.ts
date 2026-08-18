@@ -29,6 +29,9 @@ export type {
   FormSkeletonHostProps,
   FormArrivalProps,
 } from './EntityDetailsForm/components/FormSkeleton';
+export { FieldRow } from './EntityDetailsForm/components/FieldRow';
+export type { FieldRowProps } from './EntityDetailsForm/components/FieldRow';
+export type { LabelPlacement } from './EntityDetailsForm/types';
 // Generated wrappers + their props types: VehicleTypeForm/VehicleTypeFormProps,
 // VehicleForm/VehicleFormProps. Re-exported wholesale rather than named, so a
 // new manifest entry reaches the public API the moment it is generated.
