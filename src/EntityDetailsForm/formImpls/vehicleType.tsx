@@ -51,8 +51,11 @@ export interface VehicleTypeFormProps
    *  the two buttons. The dirty/saving state stays the hook's. */
   footerProps?: EditFooterHostProps;
   /** Label and styling for the loading skeleton this renders. Its *shape* is
-   *  derived from `FIELDS` + `layout` + `variant` and is not overridable —
-   *  that is what keeps it from drifting out of step with the form. */
+   *  derived from `FIELDS` + `layout` + `variant` + `labelPlacement` and is
+   *  not overridable — that is what keeps it from drifting out of step with
+   *  the form. Those four are absent from `FormSkeletonHostProps` for the
+   *  same reason: this fallback sets them after the spread, so a host value
+   *  would be overwritten anyway. */
   skeletonProps?: FormSkeletonHostProps;
 }
 
@@ -72,6 +75,7 @@ export function VehicleTypeForm({ skeletonProps, ...rest }: VehicleTypeFormProps
           fields={FIELDS}
           layout={rest.layout}
           variant={rest.variant}
+          labelPlacement={rest.labelPlacement}
         />
       }
     >
@@ -85,7 +89,7 @@ export function VehicleTypeForm({ skeletonProps, ...rest }: VehicleTypeFormProps
 function VehicleTypeFormRecord(
   props: Omit<VehicleTypeFormProps, 'skeletonProps'> & { resource: EntityResource<VehicleType> | null },
 ) {
-  const { mode = 'edit', layout, variant, slotProps, netexId, footerProps, resource, ...rest } = props;
+  const { mode = 'edit', layout, variant, labelPlacement, slotProps, netexId, footerProps, resource, ...rest } = props;
   // Display-only: renders the locked dataOwnerRef control. Overlaid on every
   // render, not just while `value` is undefined — otherwise the control keeps
   // showing the org that was current when the user first typed. The write
@@ -119,6 +123,7 @@ function VehicleTypeFormRecord(
           mode={mode}
           layout={layout}
           variant={variant}
+          labelPlacement={labelPlacement}
           slotProps={slotProps}
           errors={errors}
           disabled={saving}

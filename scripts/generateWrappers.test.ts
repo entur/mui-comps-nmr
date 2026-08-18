@@ -73,7 +73,7 @@ describe('renderWrapperSource', () => {
     // has to sit inside the boundary, which is why the wrapper splits in two.
     expect(src).toMatch(/import \{ Suspense \} from 'react';/);
     expect(src).toMatch(
-      /<Suspense\s+fallback=\{\s+<FormSkeleton\s+\{\.\.\.skeletonProps\}\s+fields=\{FIELDS\}\s+layout=\{rest\.layout\}\s+variant=\{rest\.variant\}\s+\/>\s+\}\s+>\s+<VehicleFormRecord \{\.\.\.rest\} resource=\{resource\} \/>\s+<\/Suspense>/
+      /<Suspense\s+fallback=\{\s+<FormSkeleton\s+\{\.\.\.skeletonProps\}\s+fields=\{FIELDS\}\s+layout=\{rest\.layout\}\s+variant=\{rest\.variant\}\s+labelPlacement=\{rest\.labelPlacement\}\s+\/>\s+\}\s+>\s+<VehicleFormRecord \{\.\.\.rest\} resource=\{resource\} \/>\s+<\/Suspense>/
     );
   });
 
@@ -105,6 +105,19 @@ describe('renderWrapperSource', () => {
     // user first typed, while the save stamps whatever context holds now.
     expect(src).toMatch(/value=\{\{ \.\.\.\(value \?\? \(\{\} as Vehicle\)\), dataOwnerRef \}\}/);
     expect(src).toMatch(/import \{ useSobekCtx \} from '\.\.\/\.\.\/context\/SobekContext';/);
+  });
+
+  it('threads labelPlacement to the presentation, not into ...rest', () => {
+    // The props type inherits it for free from EntityDetailsFormProps, but the
+    // Record half destructures named props — an un-destructured prop would land
+    // in `...rest`, reach useEntityForm, and be silently dropped.
+    expect(src).toMatch(/const \{[^}]*\blabelPlacement\b[^}]*\} = props;/);
+    expect(src).toMatch(/labelPlacement=\{labelPlacement\}/);
+  });
+
+  it('gives the loading skeleton the same label placement as the form', () => {
+    // Otherwise the placeholder has one column while the arriving form has two.
+    expect(src).toMatch(/labelPlacement=\{rest\.labelPlacement\}/);
   });
 });
 

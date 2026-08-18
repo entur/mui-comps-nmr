@@ -10,11 +10,12 @@
  * The data-aware wrappers render this while a record loads; a host driving the
  * presentational form directly can render it during its own fetch.
  */
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { Box, Skeleton, Stack } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material/styles';
-import type { FieldKind, FieldSpec, Layout, LayoutVariant } from '../types';
+import type { FieldKind, FieldSpec, LabelPlacement, Layout, LayoutVariant } from '../types';
 import { resolveSections } from '../utils/sections';
+import { ROW_GRID_SX, FORM_CONTAINER_SX, LABEL_PT, LABEL_TYPE_SX } from './FieldRow';
 
 // Placeholder geometry. Row heights track the controls they stand in for, so
 // the layout does not jump when the real inputs land.
@@ -48,6 +49,8 @@ export interface FormSkeletonProps {
   layout?: Layout;
   /** Same presentation the form will use, for ≥2 sections. */
   variant?: LayoutVariant;
+  /** Same placement the form will use. `'start'` adds a label column. */
+  labelPlacement?: LabelPlacement;
   /** Announced by screen readers. English default — localization is the host's
    *  job, this library carries no i18n runtime. */
   ariaLabel?: string;
@@ -58,9 +61,14 @@ export interface FormSkeletonProps {
 /**
  * The half of {@link FormSkeletonProps} a host may set when the skeleton is
  * rendered for it — by a data-aware wrapper, which derives the rest from the
- * entity registry and the props already passed to the form.
+ * entity registry and the props already passed to the form. `labelPlacement` is
+ * omitted for the same reason as `variant`: the wrapper passes down the form's
+ * own prop, so anything a host set here would be silently overwritten.
  */
-export type FormSkeletonHostProps = Omit<FormSkeletonProps, 'fields' | 'layout' | 'variant'>;
+export type FormSkeletonHostProps = Omit<
+  FormSkeletonProps,
+  'fields' | 'layout' | 'variant' | 'labelPlacement'
+>;
 
 /**
  * Draw the placeholder standing in for an entity form mid-load.
@@ -72,13 +80,22 @@ export function FormSkeleton({
   fields,
   layout,
   variant = 'tabs',
+  labelPlacement = 'float',
   ariaLabel = DEFAULT_ARIA_LABEL,
   sx,
 }: FormSkeletonProps) {
   const sections = resolveSections(fields, layout);
+  const twoCol = labelPlacement === 'start';
   // Mirror the form: a tab bar shows one panel at a time, stacked shows all.
   const tabbed = sections.length > 1 && variant === 'tabs';
   const shown = tabbed ? sections.slice(0, 1) : sections;
+
+  // Same conditional wrapper the form uses, so the float path keeps its exact
+  // current DOM (no extra Box) — a plain function, not a component, so it
+  // doesn't force a remount every render (a new component type per render
+  // would unmount and remount the whole subtree).
+  const wrap = (rows: ReactNode): ReactNode =>
+    twoCol ? <Box sx={ROW_GRID_SX}>{rows}</Box> : <>{rows}</>;
 
   return (
     <Box
@@ -89,6 +106,7 @@ export function FormSkeleton({
         {
           width: '100%',
           minWidth: 0,
+          ...(twoCol ? FORM_CONTAINER_SX : {}),
           // MUI's wave ships no reduced-motion guard of its own.
           [REDUCED]: { '& .MuiSkeleton-root': { animation: 'none' } },
         },
@@ -124,17 +142,49 @@ export function FormSkeleton({
                 sx={{ mb: 1 }}
               />
             )}
-            {s.fields.map(f => (
-              <Skeleton
-                key={f.key}
-                data-nmr-skeleton="field"
-                data-nmr-kind={fields[f.key].kind}
-                variant="rounded"
-                animation="wave"
-                height={KIND_H[fields[f.key].kind]}
-                sx={{ mb: ROW_GAP }}
-              />
-            ))}
+            {wrap(
+              s.fields.map(f =>
+                twoCol ? (
+                  <Fragment key={f.key}>
+                    {/* Carries the real label text, hidden by MUI's
+                        `withChildren` rule but still occupying its true width —
+                        so `max-content` resolves the same here as in the form
+                        and nothing shifts sideways on arrival. Both halves of
+                        that box come from `FieldRow`, never restated here:
+                        `LABEL_TYPE_SX` is `FormLabel`'s own type ramp (a bare
+                        span would inherit the ambient one and measure a
+                        different width under a host theme), and `LABEL_PT` is
+                        the offset the real label sits at — as margin, since
+                        padding on a Skeleton just makes the bar taller. */}
+                    <Skeleton
+                      data-nmr-skeleton="label"
+                      variant="text"
+                      animation="wave"
+                      sx={{ mt: LABEL_PT, ...LABEL_TYPE_SX }}
+                    >
+                      <span>{f.label}</span>
+                    </Skeleton>
+                    <Skeleton
+                      data-nmr-skeleton="field"
+                      data-nmr-kind={fields[f.key].kind}
+                      variant="rounded"
+                      animation="wave"
+                      height={KIND_H[fields[f.key].kind]}
+                    />
+                  </Fragment>
+                ) : (
+                  <Skeleton
+                    key={f.key}
+                    data-nmr-skeleton="field"
+                    data-nmr-kind={fields[f.key].kind}
+                    variant="rounded"
+                    animation="wave"
+                    height={KIND_H[fields[f.key].kind]}
+                    sx={{ mb: ROW_GAP }}
+                  />
+                )
+              )
+            )}
           </Box>
         ))}
       </Stack>

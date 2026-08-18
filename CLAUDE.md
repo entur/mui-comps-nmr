@@ -157,6 +157,16 @@ own chrome from `onSaved`/`onError`) uses the same pieces.
 - `layout?` — whitelist of sections (`{ Section: [fields] }`). Omitted field not
   rendered but value round-trips via `onChange` (loss-free). Omit layout → flat.
 - `variant?` `'tabs' | 'stacked'` — for ≥2 sections. Default `tabs`.
+- `labelPlacement?` `'float' | 'start'` — default `float` (MUI's label inside the
+  control, original markup byte-for-byte). `start` emits label + control as
+  sibling grid items (`FieldRow`), label column `max-content`, collapsing below
+  480px of the form's own inline size (`@container`, not viewport). The label
+  moves out of the control, so each kind is re-bound by hand: `htmlFor` →
+  `controlId` for everything with a real input, **`aria-labelledby` for `enum`**
+  — a `TextField select` is a non-labelable `div[role=combobox]`, so `FieldRow`
+  gets a `labelId` and `renderControl` feeds it back via
+  `slotProps.select.labelId`. `grid` keeps `ObjectGrid`'s own `aria-label`.
+  `FormSkeleton` mirrors the geometry from the same constants.
 - `serverManaged` fields (`version`, `created`, `changed`, `changedBy`) hidden
   from editable model: locked even in edit, surfaced only to *see* meta/semantic
   context. Backend-owned — **not round-tripped**, never in write payload, don't

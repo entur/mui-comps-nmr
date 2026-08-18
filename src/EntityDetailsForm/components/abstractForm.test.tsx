@@ -9,6 +9,7 @@ interface V {
   length?: number | null;
   version?: number | null;
   dataOwnerRef?: string | null;
+  vehicles?: { netexId?: string | null; name?: string | null }[] | null;
 }
 
 const fields: Record<string, FieldSpec> = {
@@ -16,7 +17,18 @@ const fields: Record<string, FieldSpec> = {
   length: { kind: 'number', path: ['length'] },
   version: { kind: 'number', path: ['version'], serverManaged: true },
   dataOwnerRef: { kind: 'text', path: ['dataOwnerRef'], locked: true },
+  vehicles: { kind: 'grid', path: ['vehicles'], serverManaged: true },
 };
+
+// `grid` is the one kind that isn't a single labelable control (see
+// `FieldRow`'s `labelable`) — several assertions below need "how many fields
+// actually get a real `<label>`", which is this count, not `fields`' size.
+const labelableFieldCount = Object.values(fields).filter(f => f.kind !== 'grid').length;
+
+/** The HTML "labelable elements" category — the only targets a `<label for>` is
+ *  allowed to name. Anything else and the association is dropped by the
+ *  accessibility mapping, silently. */
+const LABELABLE_TAGS = ['BUTTON', 'INPUT', 'METER', 'OUTPUT', 'PROGRESS', 'SELECT', 'TEXTAREA'];
 
 const Form = createAbstractEntityDetailsForm<V>(fields);
 
@@ -26,6 +38,7 @@ const Host = (props: Partial<EntityDetailsFormProps<V>>) => {
     length: 5,
     version: 1,
     dataOwnerRef: 'NOG:Authority:test',
+    vehicles: [{ netexId: 'NSB:Vehicle:1', name: 'Wagon 1' }],
   });
   return <Form value={v} onChange={setV} mode="edit" {...props} />;
 };
@@ -208,5 +221,138 @@ describe('createAbstractEntityDetailsForm', () => {
     expect(nameInput).toBeDisabled();
     expect(container.querySelector('.Mui-error')).not.toBeNull();
     expect(screen.getByText(/Already exists/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The central guarantee of two-column mode: moving the label out of the MUI
+ * control must not cost the control its accessible name. Asserted with the
+ * *same* queries in both placements — if `start` broke the binding, the shared
+ * cases below would fail only for `start`.
+ */
+describe.each(['float', 'start'] as const)('labelPlacement=%s', placement => {
+  it('keeps every control reachable by its label', () => {
+    render(<Host labelPlacement={placement} />);
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Tram');
+    expect((screen.getByLabelText('Length') as HTMLInputElement).value).toBe('5');
+  });
+
+  it('round-trips an edit', () => {
+    render(<Host labelPlacement={placement} />);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Bus' } });
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Bus');
+  });
+
+  it('still locks serverManaged and locked fields', () => {
+    render(<Host labelPlacement={placement} />);
+    expect(screen.getByLabelText('Version')).toBeDisabled();
+    expect(screen.getByLabelText('Data owner ref')).toBeDisabled();
+  });
+});
+
+describe('labelPlacement=start', () => {
+  it('gives each field exactly one label element', () => {
+    const { container } = render(<Host labelPlacement="start" />);
+    // Two would mean the control kept drawing its own beside the row's. The
+    // `grid` field is excluded from the count: it gets a visible label too,
+    // but not a `<label>` element (see `labelableFieldCount` above and the
+    // dedicated grid case below) — ObjectGrid exposes no id for a real
+    // `<label htmlFor>` to bind to, so a `<label>` there would dangle.
+    expect(container.querySelectorAll('label')).toHaveLength(labelableFieldCount);
+  });
+
+  it('draws no MUI floating label — the row owns the label instead', () => {
+    const { container } = render(<Host labelPlacement="start" />);
+    expect(container.querySelector('.MuiInputLabel-root')).toBeNull();
+  });
+
+  it('leaves the float markup alone by default', () => {
+    const { container } = render(<Host />);
+    // Every non-grid field in this fixture is TextField-backed, so the
+    // default path must still produce one MUI floating label each. `grid`
+    // never renders a `.MuiInputLabel-root` (it's not a TextField), in either
+    // placement, so it's excluded here too.
+    // NB: do NOT assert on `[class*="MuiFormLabel-root"][for]` here — the
+    // control now always carries `controlId`, so MUI's own InputLabel gains a
+    // `for` attribute in float mode too and such an assertion would fail.
+    expect(container.querySelectorAll('.MuiInputLabel-root')).toHaveLength(labelableFieldCount);
+  });
+
+  it('gives the grid row a visible, non-<label> caption with no dangling htmlFor, and the grid keeps its accessible name', async () => {
+    const { container } = render(<Host labelPlacement="start" />);
+
+    // No real `<label>` exists for the grid: its caption renders as a plain
+    // span (see FieldRow's `labelable`), so it never shows up in this query.
+    const caption = screen.getByText('Vehicles');
+    expect(caption.tagName).toBe('SPAN');
+    expect(caption.closest('label')).toBeNull();
+
+    // Belt-and-braces: every `<label>` that *does* exist in the document
+    // resolves its `for` to a real element AND that element is *labelable*.
+    // Existence alone is not enough — a `for` at a non-labelable element (a
+    // Select's `div[role=combobox]`, say) resolves fine in the DOM while the
+    // accessibility mapping discards the association and the control ends up
+    // with no name at all. Kinds in that position must go through
+    // `labelable={false}` + `aria-labelledby` instead.
+    for (const label of Array.from(container.querySelectorAll('label'))) {
+      const forId = label.getAttribute('for');
+      if (!forId) continue;
+      const target = document.getElementById(forId);
+      expect(target).not.toBeNull();
+      expect(LABELABLE_TAGS).toContain(target!.tagName);
+    }
+
+    // The grid's own name comes from `ObjectGrid`'s unconditional aria-label,
+    // independent of FieldRow — this is what keeps the grid accessible even
+    // though its row draws no `<label htmlFor>` for it.
+    const grid = await screen.findByRole('grid');
+    expect(grid).toHaveAttribute('aria-label', 'Vehicles');
+  });
+});
+
+describe('enum field, labelPlacement=start', () => {
+  // `enum` is the second kind whose control is not labelable: MUI renders a
+  // `TextField select` as `div[role=combobox]`. Its own fixture rather than a
+  // field on `fields` above, so the label counts the other cases assert on
+  // stay meaningful (an enum draws a floating label in `'float'` but a `<span>`
+  // in `'start'`, so it would belong to two different tallies).
+  const EnumForm = createAbstractEntityDetailsForm<{ hybridCategory?: string | null }>({
+    hybridCategory: { kind: 'enum', path: ['hybridCategory'], options: ['diesel', 'electric'] },
+  });
+
+  it('names the combobox via aria-labelledby, since <label for> cannot reach it', () => {
+    const { container } = render(
+      <EnumForm value={{}} onChange={() => {}} mode="edit" labelPlacement="start" />
+    );
+
+    // No `<label>` at all: a real one here would point `for` at a non-labelable
+    // element, which the accessibility mapping throws away.
+    expect(container.querySelector('label')).toBeNull();
+    expect(screen.getByLabelText('Hybrid category')).toBe(screen.getByRole('combobox'));
+  });
+
+  it('keeps drawing a real floating label in float mode', () => {
+    const { container } = render(
+      <EnumForm value={{}} onChange={() => {}} mode="edit" />
+    );
+
+    expect(container.querySelector('.MuiInputLabel-root')).not.toBeNull();
+    expect(screen.getByLabelText('Hybrid category')).toBe(screen.getByRole('combobox'));
+  });
+});
+
+describe('grid field, labelPlacement=float', () => {
+  it('is unaffected by the labelable fix — still draws its own caption, never a <label>', () => {
+    render(<Host />); // default placement: 'float'
+    // `FieldRow` draws no label of its own in `'float'` mode regardless of
+    // `labelable` (the early return in `FieldRow` short-circuits before that
+    // prop is even read), so the grid keeps drawing its own caption exactly
+    // as it did before this fix — this pins the default path stays untouched.
+    // (Other fields' own MUI floating labels *are* real `<label for>`
+    // elements in this mode, so the assertion is scoped to the grid's
+    // caption specifically, not "no label in the document".)
+    const caption = screen.getByText('Vehicles');
+    expect(caption.tagName).not.toBe('LABEL');
+    expect(caption.closest('label')).toBeNull();
   });
 });

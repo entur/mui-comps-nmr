@@ -20,6 +20,7 @@ const TWO_SECTIONS: Layout = { General: ['name', 'count'], Fleet: ['vehicles'] }
 
 const rows = (c: HTMLElement) => c.querySelectorAll('[data-nmr-skeleton="field"]');
 const tabs = (c: HTMLElement) => c.querySelectorAll('[data-nmr-skeleton="tab"]');
+const labels = (c: HTMLElement) => c.querySelectorAll('[data-nmr-skeleton="label"]');
 const px = (el: Element) => parseFloat(getComputedStyle(el).height);
 
 describe('FormSkeleton', () => {
@@ -80,6 +81,29 @@ describe('FormSkeleton', () => {
     const { container } = render(<FormSkeleton fields={FIELDS} sx={{ padding: '7px' }} />);
 
     expect(getComputedStyle(container.firstElementChild as HTMLElement).padding).toBe('7px');
+  });
+
+  it('draws no label placeholders in float mode', () => {
+    const { container } = render(<FormSkeleton fields={FIELDS} />);
+    expect(labels(container)).toHaveLength(0);
+  });
+
+  it('draws one label placeholder per field in start mode', () => {
+    const { container } = render(<FormSkeleton fields={FIELDS} labelPlacement="start" />);
+
+    // Derived exactly like the rows are — one per field, no literal.
+    expect(labels(container)).toHaveLength(Object.keys(FIELDS).length);
+    expect(rows(container)).toHaveLength(Object.keys(FIELDS).length);
+  });
+
+  it('sizes the label placeholder from the real label text', () => {
+    const { container } = render(<FormSkeleton fields={FIELDS} labelPlacement="start" />);
+
+    // `minmax(0, max-content)` resolves against the column's contents, so a
+    // generic bar would size the skeleton's label column differently from the
+    // form's and the layout would jump sideways on arrival. Carrying the actual
+    // (visually hidden) text is what makes both resolve to the same width.
+    expect(labels(container)[0].textContent).toBe('Name');
   });
 });
 
