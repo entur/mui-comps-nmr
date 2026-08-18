@@ -29,7 +29,16 @@ export type {
   FormSkeletonHostProps,
   FormArrivalProps,
 } from './EntityDetailsForm/components/FormSkeleton';
-export { FieldRow } from './EntityDetailsForm/components/FieldRow';
+// Two-column label rows. `FieldRow` returns a bare label + control *pair* in
+// `'start'` mode, which only lays out as two columns if its parent declares
+// `ROW_GRID_SX` and an ancestor declares `FORM_CONTAINER_SX` (the container the
+// collapse query resolves against). Exporting the component without them would
+// hand a host a piece it cannot assemble.
+export {
+  FieldRow,
+  ROW_GRID_SX,
+  FORM_CONTAINER_SX,
+} from './EntityDetailsForm/components/FieldRow';
 export type { FieldRowProps } from './EntityDetailsForm/components/FieldRow';
 export type { LabelPlacement } from './EntityDetailsForm/types';
 // Generated wrappers + their props types: VehicleTypeForm/VehicleTypeFormProps,

@@ -20,6 +20,7 @@ import {
   VehicleTypeForm,
   type Layout,
   type LayoutVariant,
+  type LabelPlacement,
   type ControlSlotProps,
   type SaveToast,
 } from "../index";
@@ -128,7 +129,7 @@ type DataAwareForm = FC<{
   netexId?: string;
   mode?: "view" | "edit";
   variant?: LayoutVariant;
-  labelPlacement?: "float" | "start";
+  labelPlacement?: LabelPlacement;
   slotProps?: ControlSlotProps;
   layout?: Layout;
   onSaved?: (netexId: string) => void;
@@ -177,7 +178,7 @@ interface GqlHostPageProps {
   formLayout?: LayoutPreset;
   /** Label placement for every field: floating inside the control, or a
    *  two-column row with the label in the left column. */
-  labelPlacement?: "float" | "start";
+  labelPlacement?: LabelPlacement;
   /** Mock read latency. The forms render their own load states, so this is the
    *  only way to see the shaped skeleton and the arrival fade — at `0` the
    *  response resolves in the same tick and neither paints.

@@ -51,8 +51,11 @@ export interface VehicleFormProps
    *  the two buttons. The dirty/saving state stays the hook's. */
   footerProps?: EditFooterHostProps;
   /** Label and styling for the loading skeleton this renders. Its *shape* is
-   *  derived from `FIELDS` + `layout` + `variant` and is not overridable —
-   *  that is what keeps it from drifting out of step with the form. */
+   *  derived from `FIELDS` + `layout` + `variant` + `labelPlacement` and is
+   *  not overridable — that is what keeps it from drifting out of step with
+   *  the form. Those four are absent from `FormSkeletonHostProps` for the
+   *  same reason: this fallback sets them after the spread, so a host value
+   *  would be overwritten anyway. */
   skeletonProps?: FormSkeletonHostProps;
 }
 

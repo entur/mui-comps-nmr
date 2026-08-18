@@ -15,7 +15,7 @@ import { Box, Skeleton, Stack } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material/styles';
 import type { FieldKind, FieldSpec, LabelPlacement, Layout, LayoutVariant } from '../types';
 import { resolveSections } from '../utils/sections';
-import { ROW_GRID_SX, FORM_CONTAINER_SX } from './FieldRow';
+import { ROW_GRID_SX, FORM_CONTAINER_SX, LABEL_PT, LABEL_TYPE_SX } from './FieldRow';
 
 // Placeholder geometry. Row heights track the controls they stand in for, so
 // the layout does not jump when the real inputs land.
@@ -61,9 +61,14 @@ export interface FormSkeletonProps {
 /**
  * The half of {@link FormSkeletonProps} a host may set when the skeleton is
  * rendered for it — by a data-aware wrapper, which derives the rest from the
- * entity registry and the props already passed to the form.
+ * entity registry and the props already passed to the form. `labelPlacement` is
+ * omitted for the same reason as `variant`: the wrapper passes down the form's
+ * own prop, so anything a host set here would be silently overwritten.
  */
-export type FormSkeletonHostProps = Omit<FormSkeletonProps, 'fields' | 'layout' | 'variant'>;
+export type FormSkeletonHostProps = Omit<
+  FormSkeletonProps,
+  'fields' | 'layout' | 'variant' | 'labelPlacement'
+>;
 
 /**
  * Draw the placeholder standing in for an entity form mid-load.
@@ -144,8 +149,19 @@ export function FormSkeleton({
                     {/* Carries the real label text, hidden by MUI's
                         `withChildren` rule but still occupying its true width —
                         so `max-content` resolves the same here as in the form
-                        and nothing shifts sideways on arrival. */}
-                    <Skeleton data-nmr-skeleton="label" variant="text" animation="wave">
+                        and nothing shifts sideways on arrival. Both halves of
+                        that box come from `FieldRow`, never restated here:
+                        `LABEL_TYPE_SX` is `FormLabel`'s own type ramp (a bare
+                        span would inherit the ambient one and measure a
+                        different width under a host theme), and `LABEL_PT` is
+                        the offset the real label sits at — as margin, since
+                        padding on a Skeleton just makes the bar taller. */}
+                    <Skeleton
+                      data-nmr-skeleton="label"
+                      variant="text"
+                      animation="wave"
+                      sx={{ mt: LABEL_PT, ...LABEL_TYPE_SX }}
+                    >
                       <span>{f.label}</span>
                     </Skeleton>
                     <Skeleton

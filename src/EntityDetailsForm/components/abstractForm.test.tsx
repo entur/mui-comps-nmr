@@ -25,6 +25,11 @@ const fields: Record<string, FieldSpec> = {
 // actually get a real `<label>`", which is this count, not `fields`' size.
 const labelableFieldCount = Object.values(fields).filter(f => f.kind !== 'grid').length;
 
+/** The HTML "labelable elements" category — the only targets a `<label for>` is
+ *  allowed to name. Anything else and the association is dropped by the
+ *  accessibility mapping, silently. */
+const LABELABLE_TAGS = ['BUTTON', 'INPUT', 'METER', 'OUTPUT', 'PROGRESS', 'SELECT', 'TEXTAREA'];
+
 const Form = createAbstractEntityDetailsForm<V>(fields);
 
 const Host = (props: Partial<EntityDetailsFormProps<V>>) => {
@@ -283,10 +288,18 @@ describe('labelPlacement=start', () => {
     expect(caption.closest('label')).toBeNull();
 
     // Belt-and-braces: every `<label>` that *does* exist in the document
-    // still resolves its `for` to a real element — none dangles.
+    // resolves its `for` to a real element AND that element is *labelable*.
+    // Existence alone is not enough — a `for` at a non-labelable element (a
+    // Select's `div[role=combobox]`, say) resolves fine in the DOM while the
+    // accessibility mapping discards the association and the control ends up
+    // with no name at all. Kinds in that position must go through
+    // `labelable={false}` + `aria-labelledby` instead.
     for (const label of Array.from(container.querySelectorAll('label'))) {
       const forId = label.getAttribute('for');
-      if (forId) expect(document.getElementById(forId)).not.toBeNull();
+      if (!forId) continue;
+      const target = document.getElementById(forId);
+      expect(target).not.toBeNull();
+      expect(LABELABLE_TAGS).toContain(target!.tagName);
     }
 
     // The grid's own name comes from `ObjectGrid`'s unconditional aria-label,
@@ -294,6 +307,37 @@ describe('labelPlacement=start', () => {
     // though its row draws no `<label htmlFor>` for it.
     const grid = await screen.findByRole('grid');
     expect(grid).toHaveAttribute('aria-label', 'Vehicles');
+  });
+});
+
+describe('enum field, labelPlacement=start', () => {
+  // `enum` is the second kind whose control is not labelable: MUI renders a
+  // `TextField select` as `div[role=combobox]`. Its own fixture rather than a
+  // field on `fields` above, so the label counts the other cases assert on
+  // stay meaningful (an enum draws a floating label in `'float'` but a `<span>`
+  // in `'start'`, so it would belong to two different tallies).
+  const EnumForm = createAbstractEntityDetailsForm<{ hybridCategory?: string | null }>({
+    hybridCategory: { kind: 'enum', path: ['hybridCategory'], options: ['diesel', 'electric'] },
+  });
+
+  it('names the combobox via aria-labelledby, since <label for> cannot reach it', () => {
+    const { container } = render(
+      <EnumForm value={{}} onChange={() => {}} mode="edit" labelPlacement="start" />
+    );
+
+    // No `<label>` at all: a real one here would point `for` at a non-labelable
+    // element, which the accessibility mapping throws away.
+    expect(container.querySelector('label')).toBeNull();
+    expect(screen.getByLabelText('Hybrid category')).toBe(screen.getByRole('combobox'));
+  });
+
+  it('keeps drawing a real floating label in float mode', () => {
+    const { container } = render(
+      <EnumForm value={{}} onChange={() => {}} mode="edit" />
+    );
+
+    expect(container.querySelector('.MuiInputLabel-root')).not.toBeNull();
+    expect(screen.getByLabelText('Hybrid category')).toBe(screen.getByRole('combobox'));
   });
 });
 

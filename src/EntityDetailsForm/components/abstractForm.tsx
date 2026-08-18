@@ -1,11 +1,19 @@
 import { useId, useState, type FC, type ReactNode } from 'react';
 import { Box, Stack, Tab, Tabs, Typography } from '@mui/material';
-import type { EntityDetailsFormProps, FieldSpec } from '../types';
+import type { EntityDetailsFormProps, FieldKind, FieldSpec } from '../types';
 import { getPath, setPath } from '../utils/paths';
 import { resolveSections, type ResolvedField } from '../utils/sections';
 import { renderControl } from './controls';
 import { FieldRow, ROW_GRID_SX, FORM_CONTAINER_SX } from './FieldRow';
 import { ObjectGrid } from '../../ObjectGrid';
+
+/** Suffix for the id minted on a two-column row's label element, so a control
+ *  that cannot take a `<label htmlFor>` can name itself with `aria-labelledby`. */
+const LABEL_ID_SUFFIX = '-label';
+
+/** Kinds whose control is not a single labelable element — see the `labelable`
+ *  comment on the `FieldRow` below for what names each of them instead. */
+const NON_LABELABLE: ReadonlySet<FieldKind> = new Set<FieldKind>(['grid', 'enum']);
 
 /**
  * Build a presentational (dumb) entity form bound to a generated `FIELDS`
@@ -44,6 +52,9 @@ export function createAbstractEntityDetailsForm<E>(
     ): ReactNode => {
       const spec = fields[key];
       const id = `${uid}${key}`;
+      // Only minted in two-column mode: in `'float'` the row draws no label, and
+      // MUI's own InputLabel already owns `${id}-label`.
+      const labelId = twoCol ? `${id}${LABEL_ID_SUFFIX}` : undefined;
       const disabled = disabledProp || mode === 'view' || !!spec.serverManaged || !!spec.locked;
       const error = errors?.[key];
 
@@ -69,6 +80,7 @@ export function createAbstractEntityDetailsForm<E>(
             slotProps,
             error,
             controlId: id,
+            labelId,
             labelless: twoCol,
           })
         );
@@ -77,15 +89,20 @@ export function createAbstractEntityDetailsForm<E>(
         <FieldRow
           key={key}
           id={id}
+          labelId={labelId}
           label={label}
           placement={labelPlacement}
           disabled={disabled}
           error={!!error}
-          // A grid renders a table, not a single control — ObjectGrid takes no
-          // `id` to point a `<label htmlFor>` at, so a real label there would
-          // dangle. FieldRow keeps the label visible in that case, just not as
-          // a `<label>` element (see FieldRow's own doc on `labelable`).
-          labelable={spec.kind !== 'grid'}
+          // Two kinds are not a single labelable control, so a `<label htmlFor>`
+          // at them would be discarded by the accessibility mapping (or dangle
+          // outright). FieldRow keeps the label visible in both cases, just not
+          // as a `<label>` element (see FieldRow's own doc on `labelable`):
+          //   grid — ObjectGrid renders a table and exposes no `id`; it names
+          //          itself with its own unconditional `aria-label`.
+          //   enum — MUI's Select renders `div[role=combobox]`, a non-labelable
+          //          element; `labelId` above points it back here instead.
+          labelable={!NON_LABELABLE.has(spec.kind)}
         >
           {body}
         </FieldRow>

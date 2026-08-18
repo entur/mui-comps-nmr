@@ -54,6 +54,7 @@ const layout: VehicleLayout = {
 | `mode?` | `'view' \| 'edit'` | Default `'edit'`. |
 | `layout?` | `Layout<EntityField>` | Whitelist of sections (see below). Omitted → flat, all fields. |
 | `variant?` | `'tabs' \| 'stacked'` | ≥2 sections. Default `'tabs'`. |
+| `labelPlacement?` | `'float' \| 'start'` | Default `'float'` (MUI's label inside the control). `'start'` puts every label in a left column of a two-column grid, sized to the widest label in the section; collapses to one column below 480px of the *form's* own width. The skeleton follows it. |
 | `slotProps?` | `ControlSlotProps` | Per-kind MUI overrides (TextField, Switch, DataGrid, Tabs). |
 | `onSaved?` | `(netexId: string) => void` | Called after successful save + refetch. |
 | `onError?` | `(generalErrors: string[]) => void` | Called with non-field GraphQL / network errors, **on load and on save**. Carries the server's own messages; falls back to `['Failed to load']` / `['Failed to save']` when the failure yields no usable GraphQL errors (missing *or* empty `errors`). Field-level validation on save routes to the fields for inline display and fires no callback. |

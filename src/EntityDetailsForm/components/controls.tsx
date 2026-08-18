@@ -22,6 +22,25 @@ const mergeSlots = (extra?: TextFieldProps['slotProps']): TextFieldProps['slotPr
     ? SHRINK_LABEL
     : { ...extra, inputLabel: { ...SHRINK_LABEL.inputLabel, ...extra.inputLabel } };
 
+/** Point a `TextField select` at the row's own label element.
+ *
+ *  A `Select` renders `div[role=combobox]`, which is not labelable, so the row's
+ *  `<label htmlFor>` cannot name it. MUI's fallback is `aria-labelledby`, built
+ *  from `labelId` + the combobox's own id — but `labelId` is TextField's
+ *  `inputLabelId`, which is `undefined` whenever `label` is (i.e. always in
+ *  labelless mode), collapsing the reference to the combobox pointing at itself.
+ *  TextField spreads `slotProps.select` *after* its own `labelId`, so setting it
+ *  here restores the name (and, as a bonus, names the open listbox too).
+ *
+ *  @param slots   already-merged TextField slotProps for this kind
+ *  @param labelId id of the row's label element, or `undefined` in float mode
+ *  @returns `slots` unchanged when there is no label element to point at */
+const withLabelId = (
+  slots: TextFieldProps['slotProps'],
+  labelId?: string
+): TextFieldProps['slotProps'] =>
+  labelId ? { ...slots, select: { ...slots?.select, labelId } } : slots;
+
 const numVal = (n: unknown): number | '' => (n == null ? '' : (n as number));
 const numOr = (s: string): number | undefined => (s === '' ? undefined : Number(s));
 const textOr = (s: string): string | undefined => (s === '' ? undefined : s);
@@ -49,6 +68,12 @@ export interface ControlProps {
   /** DOM id for the control's own input, so a two-column row's `<label htmlFor>`
    *  binds to it. Unset in `'float'` mode, where MUI owns the label. */
   controlId?: string;
+  /** DOM id of the row's label element, for controls that cannot be reached by
+   *  `<label htmlFor>` and must name themselves with `aria-labelledby`. Only
+   *  `enum` needs it (its `Select` renders a non-labelable
+   *  `div[role=combobox]`); every other kind puts `controlId` on a real input.
+   *  Unset in `'float'` mode, where MUI owns the label. */
+  labelId?: string;
   /** The row draws the label, so the control must not draw one of its own —
    *  otherwise it appears twice. */
   labelless?: boolean;
@@ -75,6 +100,7 @@ export function renderControl({
   slotProps,
   error,
   controlId,
+  labelId,
   labelless,
 }: ControlProps): ReactNode {
   // Shared TextField props. `slotProps` is set per-kind below (each TextField
@@ -171,7 +197,7 @@ export function renderControl({
       return (
         <TextField
           {...common}
-          slotProps={mergeSlots(slotProps?.enum)}
+          slotProps={withLabelId(mergeSlots(slotProps?.enum), labelId)}
           select
           value={(value as string | null | undefined) ?? ''}
           onChange={e => onChange(e.target.value || undefined)}

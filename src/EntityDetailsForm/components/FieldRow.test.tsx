@@ -60,14 +60,24 @@ describe('FieldRow', () => {
     expect(screen.getByText('Fleet').tagName).toBe('SPAN');
   });
 
-  it('defaults labelable to true, so omitting it reproduces the real-label behaviour', () => {
+  it('puts labelId on the label element, so a non-labelable control can point back', () => {
+    // The route `enum` depends on: MUI's Select renders `div[role=combobox]`,
+    // which `<label htmlFor>` cannot name, so `abstractForm` passes the label's
+    // own id to the control for `aria-labelledby` instead.
     render(
-      <FieldRow id="f1" label="Registration number" placement="start">
-        <input id="f1" />
+      <FieldRow
+        id="f1"
+        labelId="f1-label"
+        label="Hybrid category"
+        placement="start"
+        labelable={false}
+      >
+        <div role="combobox" id="f1" aria-labelledby="f1-label" />
       </FieldRow>
     );
 
-    expect(screen.getByLabelText('Registration number')).toBe(screen.getByRole('textbox'));
+    expect(screen.getByText('Hybrid category').id).toBe('f1-label');
+    expect(screen.getByLabelText('Hybrid category')).toBe(screen.getByRole('combobox'));
   });
 
   it('scopes the collapse to the form’s own width, not the viewport', () => {

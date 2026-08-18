@@ -18,7 +18,20 @@ import type { LabelPlacement } from '../types';
 // Row geometry. COLLAPSE_W is the one genuine threshold in the layout: below it
 // the control column is too narrow to be usable, so the label falls above.
 const COLLAPSE_W = 480;
-const COL_GAP = 2, ROW_GAP = 2, LABEL_PT = 1;
+const COL_GAP = 2, ROW_GAP = 2;
+// MUI's own FormLabel line-height, restated so the skeleton can adopt it.
+const LABEL_LH = '1.4375em';
+
+/** Top offset that lines the label's first line up with the control beside it.
+ *  Exported for {@link FormSkeleton}'s placeholder, which has to start at the
+ *  same y or the label drops 8px on arrival. */
+export const LABEL_PT = 1;
+
+/** `FormLabel`'s own type ramp, named rather than left implicit. The skeleton's
+ *  placeholder is a bare element and would otherwise inherit ambient typography
+ *  — two ramps resolve two different `max-content` widths for the same text,
+ *  which shifts the whole label column sideways when the form arrives. */
+export const LABEL_TYPE_SX = { typography: 'body1', lineHeight: LABEL_LH } as const;
 
 /** Marks the form root as a query container. Kept separate from
  *  {@link ROW_GRID_SX} deliberately: a `@container` rule resolves against the
@@ -49,6 +62,13 @@ export interface FieldRowProps {
   /** DOM id of the control this row labels — the `htmlFor` target. Ignored when
    *  {@link FieldRowProps.labelable} is `false`. */
   id: string;
+  /** DOM id put on the label element itself, so a control that cannot be reached
+   *  by `htmlFor` can point back at it with `aria-labelledby`. That is the only
+   *  route left for a `kind: 'enum'`, whose MUI `Select` renders a
+   *  `div[role=combobox]` — a *non-labelable* element, so `<label for>` at it is
+   *  discarded by the accessibility mapping and the control ends up unnamed.
+   *  Optional: rows whose control is labelable need nothing here. */
+  labelId?: string;
   /** Resolved label (layout override, or the humanized key). */
   label: string;
   placement: LabelPlacement;
@@ -56,13 +76,18 @@ export interface FieldRowProps {
   disabled?: boolean;
   /** Tints the label alongside a control showing a server validation error. */
   error?: boolean;
-  /** Whether `id` names a single labelable form control. Default `true`. A
-   *  `grid` field renders a data table, not a control — a `<label htmlFor>`
-   *  pointing at it (or at nothing, since `ObjectGrid` takes no `id`) would be
-   *  invalid markup, so those rows pass `false` here to keep the visible label
-   *  (still placed in the left column, still greyed/tinted the same way) while
-   *  rendering it as a non-`<label>` element. The grid's accessible name comes
-   *  from `ObjectGrid`'s own unconditional `aria-label`, not from this label. */
+  /** Whether `id` names a single labelable form control. Default `true`. Two
+   *  kinds set `false`:
+   *
+   *  - `grid` renders a data table, not a control — a `<label htmlFor>` pointing
+   *    at it (or at nothing, since `ObjectGrid` takes no `id`) would be invalid
+   *    markup. Its accessible name comes from `ObjectGrid`'s own unconditional
+   *    `aria-label`, not from this label.
+   *  - `enum` renders `div[role=combobox]`, which is not a labelable element;
+   *    it is named via {@link FieldRowProps.labelId} + `aria-labelledby` instead.
+   *
+   *  Either way the label stays visible, in the left column, greyed/tinted the
+   *  same way — it is just not emitted as a `<label>` element. */
   labelable?: boolean;
   children: ReactNode;
 }
@@ -76,6 +101,7 @@ export interface FieldRowProps {
  */
 export function FieldRow({
   id,
+  labelId,
   label,
   placement,
   disabled,
@@ -88,10 +114,11 @@ export function FieldRow({
     <>
       <FormLabel
         component={labelable ? 'label' : 'span'}
+        id={labelId}
         htmlFor={labelable ? id : undefined}
         disabled={disabled}
         error={error}
-        sx={{ pt: LABEL_PT }}
+        sx={{ pt: LABEL_PT, ...LABEL_TYPE_SX }}
       >
         {label}
       </FormLabel>
