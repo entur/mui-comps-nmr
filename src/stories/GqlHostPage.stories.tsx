@@ -128,6 +128,7 @@ type DataAwareForm = FC<{
   netexId?: string;
   mode?: "view" | "edit";
   variant?: LayoutVariant;
+  labelPlacement?: "float" | "start";
   slotProps?: ControlSlotProps;
   layout?: Layout;
   onSaved?: (netexId: string) => void;
@@ -174,6 +175,9 @@ interface GqlHostPageProps {
   tabStyle?: TabStyle;
   /** Which `layout` reaches the form — see {@link LayoutPreset}. */
   formLayout?: LayoutPreset;
+  /** Label placement for every field: floating inside the control, or a
+   *  two-column row with the label in the left column. */
+  labelPlacement?: "float" | "start";
   /** Mock read latency. The forms render their own load states, so this is the
    *  only way to see the shaped skeleton and the arrival fade — at `0` the
    *  response resolves in the same tick and neither paints.
@@ -228,6 +232,7 @@ const defined = <T extends object>(o: T): Partial<T> =>
 const GqlHostPage = ({
   tabStyle = "one-line",
   formLayout = "curated",
+  labelPlacement = "float",
   slotText,
   slotNumber,
   slotName,
@@ -413,6 +418,7 @@ const GqlHostPage = ({
                 netexId={selection.netexId}
                 mode={mode}
                 variant={variant}
+                labelPlacement={labelPlacement}
                 slotProps={slotProps}
                 // `zero-config` omits it entirely — flat render, every field.
                 layout={formLayout === "curated" ? active.layout : undefined}
@@ -514,6 +520,7 @@ const meta: Meta<typeof GqlHostPage> = {
   args: {
     tabStyle: "one-line",
     formLayout: "curated",
+    labelPlacement: "float",
     readDelayMs: DEFAULT_READ_DELAY_MS,
   },
   argTypes: {
@@ -530,6 +537,13 @@ const meta: Meta<typeof GqlHostPage> = {
       table: { category: CAT_PAGE },
       description:
         "The form's `layout`: curated = the per-entity fixture from initLayouts (sections + reference `options`); zero-config = layout omitted, so every field renders flat incl. serverManaged timestamps and `reference` degrades to a free-text id. Not an object control — a layout holds `options` closures a serialized control would drop.",
+    },
+    labelPlacement: {
+      control: "inline-radio",
+      options: ["float", "start"],
+      table: { category: CAT_PAGE },
+      description:
+        "Label placement: float = MUI's floating label inside the control; start = two-column row, label left. The label column auto-fits the widest label in each section, and collapses back to stacked when the form's own container drops below 480px.",
     },
     readDelayMs: {
       control: { type: "range", min: 0, max: 3000, step: 100 },
